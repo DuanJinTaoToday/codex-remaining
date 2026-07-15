@@ -94,6 +94,12 @@ public static class CodexExecutableLocator
             return Path.GetFullPath(configuredPath!);
         }
 
+        var desktopCandidate = FindDesktopExecutable();
+        if (desktopCandidate is not null)
+        {
+            return desktopCandidate;
+        }
+
         var pathDirectories = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -116,12 +122,6 @@ public static class CodexExecutableLocator
                     return Path.GetFullPath(candidate);
                 }
             }
-        }
-
-        var desktopCandidate = FindDesktopExecutable();
-        if (desktopCandidate is not null)
-        {
-            return desktopCandidate;
         }
 
         var windowsAppsCandidate = Path.Combine(
@@ -221,7 +221,7 @@ internal sealed class CodexAppServerSession(Process process) : IAppServerSession
             {
                 name = "codex-remaining",
                 title = "Codex Remaining",
-                version = "0.1.0",
+                version = "0.1.1",
             },
             capabilities = new
             {
