@@ -13,7 +13,7 @@
 - 即使 Codex 桌面客户端未运行，悬浮软件也能独立显示和刷新用量。
 - 默认随 Windows 登录自动启动，并允许通过右键菜单关闭自动启动。
 - 仅允许单实例运行；重复启动时唤醒已有胶囊、确保其位于可见屏幕范围并立即刷新。
-- 本机必须已安装并登录 Codex；除非通过 `CODEX_EXECUTABLE` 显式指定，软件优先使用 Codex App 内置的最新 `codex.exe`，找不到时再回退到 `PATH` 中的 CLI。
+- 本机必须已安装并登录 Codex；有效的 `CODEX_EXECUTABLE` 显式路径具有最高优先级，否则软件优先使用 Codex App 内置的当前 `codex.exe`，找不到时再回退到 `PATH` 中的 CLI。
 - 安装包不捆绑 Codex CLI，也不实现独立登录流程。
 
 ## 交付
