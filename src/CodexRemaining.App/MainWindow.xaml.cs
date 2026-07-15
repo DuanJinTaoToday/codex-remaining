@@ -39,11 +39,7 @@ public partial class MainWindow : Window
 
     public void RestoreToVisibleArea()
     {
-        var width = ActualWidth > 0 ? ActualWidth : MinWidth;
-        var height = ActualHeight > 0 ? ActualHeight : 40;
-        var area = WindowPlacement.GetNearestWorkArea(new Rect(Left, Top, width, height));
-        Left = Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - width));
-        Top = Math.Clamp(Top, area.Top, Math.Max(area.Top, area.Bottom - height));
+        WindowPlacement.ConstrainToNearestWorkArea(this);
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)

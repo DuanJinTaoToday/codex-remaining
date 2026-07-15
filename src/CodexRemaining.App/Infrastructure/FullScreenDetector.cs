@@ -17,11 +17,6 @@ public static class FullScreenDetector
             return false;
         }
 
-        if (IsZoomed(foreground))
-        {
-            return false;
-        }
-
         var className = new StringBuilder(64);
         _ = GetClassName(foreground, className, className.Capacity);
         if (className.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd")
@@ -50,10 +45,6 @@ public static class FullScreenDetector
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsZoomed(IntPtr window);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

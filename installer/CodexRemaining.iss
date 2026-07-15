@@ -9,6 +9,7 @@ AppVersion={#AppVersion}
 DefaultDirName={localappdata}\Programs\CodexRemaining
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
+DisableDirPage=yes
 OutputDir=..\artifacts
 OutputBaseFilename=CodexRemaining-Setup
 Compression=lzma2

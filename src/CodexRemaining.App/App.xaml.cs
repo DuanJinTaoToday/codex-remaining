@@ -51,6 +51,7 @@ public partial class App : System.Windows.Application
 
         window.Show();
         await viewModel.StartAsync();
+        await LogCodexVersionAsync();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -59,5 +60,12 @@ public partial class App : System.Windows.Application
         singleInstance?.Dispose();
         logger?.Info("应用退出");
         base.OnExit(e);
+    }
+
+    private async Task LogCodexVersionAsync()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var version = await CodexVersionReader.ReadAsync(timeout.Token);
+        logger?.Info($"Codex 版本: {version ?? "未知"}");
     }
 }

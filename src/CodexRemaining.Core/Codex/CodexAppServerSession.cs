@@ -118,6 +118,12 @@ public static class CodexExecutableLocator
             }
         }
 
+        var desktopCandidate = FindDesktopExecutable();
+        if (desktopCandidate is not null)
+        {
+            return desktopCandidate;
+        }
+
         var windowsAppsCandidate = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Microsoft",
@@ -125,6 +131,42 @@ public static class CodexExecutableLocator
             "codex.exe");
 
         return IsExecutable(windowsAppsCandidate) ? windowsAppsCandidate : null;
+    }
+
+    private static string? FindDesktopExecutable()
+    {
+        var binDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "OpenAI",
+            "Codex",
+            "bin");
+
+        try
+        {
+            if (!Directory.Exists(binDirectory))
+            {
+                return null;
+            }
+
+            foreach (var versionDirectory in Directory
+                         .EnumerateDirectories(binDirectory)
+                         .OrderByDescending(Directory.GetLastWriteTimeUtc))
+            {
+                var executable = Path.Combine(versionDirectory, "codex.exe");
+                if (IsExecutable(executable))
+                {
+                    return executable;
+                }
+            }
+
+            var fallbackExecutable = Path.Combine(binDirectory, "codex.exe");
+            return IsExecutable(fallbackExecutable) ? fallbackExecutable : null;
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private static bool IsExecutable(string? path) =>
