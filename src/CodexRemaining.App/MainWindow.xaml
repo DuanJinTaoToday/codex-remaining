@@ -12,6 +12,7 @@
         Topmost="True"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
         Loaded="Window_Loaded"
+        SizeChanged="Window_SizeChanged"
         Closing="Window_Closing">
     <Window.ContextMenu>
         <ContextMenu Opened="ContextMenu_Opened">
@@ -20,13 +21,28 @@
                       Header="开机自启"
                       IsCheckable="True"
                       Click="AutoStartMenuItem_Click" />
+            <MenuItem Header="胶囊尺寸">
+                <MenuItem x:Name="SmallSizeMenuItem"
+                          Header="小"
+                          IsCheckable="True"
+                          Click="CapsuleSizeMenuItem_Click" />
+                <MenuItem x:Name="MediumSizeMenuItem"
+                          Header="中"
+                          IsCheckable="True"
+                          Click="CapsuleSizeMenuItem_Click" />
+                <MenuItem x:Name="LargeSizeMenuItem"
+                          Header="大"
+                          IsCheckable="True"
+                          Click="CapsuleSizeMenuItem_Click" />
+            </MenuItem>
             <MenuItem Header="重置悬浮位置" Click="ResetPositionMenuItem_Click" />
             <Separator />
             <MenuItem Header="退出" Click="ExitMenuItem_Click" />
         </ContextMenu>
     </Window.ContextMenu>
 
-    <Border Padding="14,8"
+    <Border x:Name="RootBorder"
+            Padding="14,8"
             CornerRadius="18"
             Background="{DynamicResource CardBackground}"
             BorderThickness="1.5"

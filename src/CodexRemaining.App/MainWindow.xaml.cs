@@ -11,11 +11,14 @@ namespace CodexRemaining.App;
 
 public partial class MainWindow : Window
 {
+    private const double SnapDistanceInDips = 24;
+
     private readonly MainWindowViewModel viewModel;
     private readonly AppSettingsStore settingsStore;
     private readonly AppSettings settings;
     private readonly DispatcherTimer fullScreenTimer;
     private bool hiddenForFullScreen;
+    private bool placementRestoreQueued;
 
     public MainWindow(
         MainWindowViewModel viewModel,
@@ -29,6 +32,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = viewModel;
         ApplyTheme();
+        ApplyCapsuleSize(settings.CapsuleSize);
 
         SystemEvents.UserPreferenceChanged += SystemEvents_UserPreferenceChanged;
         SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
@@ -39,12 +43,29 @@ public partial class MainWindow : Window
 
     public void RestoreToVisibleArea()
     {
+        if (settings.Attachment is not null)
+        {
+            var restored = WindowPlacement.RestoreAttachment(this, settings.Attachment);
+            if (restored is not null)
+            {
+                settings.Attachment = restored;
+                SavePosition();
+                return;
+            }
+        }
+
+        settings.Attachment = null;
         WindowPlacement.ConstrainToNearestWorkArea(this);
+        SavePosition();
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        if (settings.Left is double left && settings.Top is double top)
+        if (settings.Attachment is not null)
+        {
+            RestoreToVisibleArea();
+        }
+        else if (settings.Left is double left && settings.Top is double top)
         {
             Left = left;
             Top = top;
@@ -79,6 +100,9 @@ public partial class MainWindow : Window
         var moved = Math.Abs(Left - startingLeft) > 3 || Math.Abs(Top - startingTop) > 3;
         if (moved)
         {
+            settings.Attachment = WindowPlacement.SnapToNearestWorkArea(
+                this,
+                SnapDistanceInDips);
             SavePosition();
         }
         else
@@ -90,11 +114,28 @@ public partial class MainWindow : Window
     private async void RefreshMenuItem_Click(object sender, RoutedEventArgs e) =>
         await viewModel.RefreshAsync();
 
-    private void ContextMenu_Opened(object sender, RoutedEventArgs e) =>
+    private void ContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
         AutoStartMenuItem.IsChecked = viewModel.IsAutoStartEnabled;
+        SmallSizeMenuItem.IsChecked = settings.CapsuleSize is CapsuleSizePreset.Small;
+        MediumSizeMenuItem.IsChecked = settings.CapsuleSize is CapsuleSizePreset.Medium;
+        LargeSizeMenuItem.IsChecked = settings.CapsuleSize is CapsuleSizePreset.Large;
+    }
 
     private void AutoStartMenuItem_Click(object sender, RoutedEventArgs e) =>
         viewModel.SetAutoStart(AutoStartMenuItem.IsChecked);
+
+    private void CapsuleSizeMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        settings.CapsuleSize = ReferenceEquals(sender, SmallSizeMenuItem)
+            ? CapsuleSizePreset.Small
+            : ReferenceEquals(sender, LargeSizeMenuItem)
+                ? CapsuleSizePreset.Large
+                : CapsuleSizePreset.Medium;
+        ApplyCapsuleSize(settings.CapsuleSize);
+        SavePosition();
+        QueueAttachmentRestore();
+    }
 
     private void ResetPositionMenuItem_Click(object sender, RoutedEventArgs e) => ResetPosition();
 
@@ -103,9 +144,16 @@ public partial class MainWindow : Window
 
     private void ResetPosition()
     {
-        var area = SystemParameters.WorkArea;
-        Left = Math.Max(area.Left, area.Right - ActualWidth - 24);
-        Top = area.Top + 72;
+        settings.Attachment = WindowPlacement.AttachToPrimaryCorner(
+            this,
+            CapsuleAnchor.TopRight);
+        if (settings.Attachment is null)
+        {
+            var area = SystemParameters.WorkArea;
+            Left = Math.Max(area.Left, area.Right - ActualWidth);
+            Top = area.Top;
+        }
+
         SavePosition();
     }
 
@@ -140,6 +188,43 @@ public partial class MainWindow : Window
             RestoreToVisibleArea();
             SavePosition();
         });
+
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e) =>
+        QueueAttachmentRestore();
+
+    private void QueueAttachmentRestore()
+    {
+        if (!IsLoaded || settings.Attachment is null || placementRestoreQueued)
+        {
+            return;
+        }
+
+        placementRestoreQueued = true;
+        _ = Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded,
+            () =>
+            {
+                placementRestoreQueued = false;
+                var restored = WindowPlacement.RestoreAttachment(this, settings.Attachment);
+                if (restored is not null)
+                {
+                    settings.Attachment = restored;
+                    SavePosition();
+                }
+            });
+    }
+
+    private void ApplyCapsuleSize(CapsuleSizePreset size)
+    {
+        var scale = size switch
+        {
+            CapsuleSizePreset.Small => 0.85,
+            CapsuleSizePreset.Large => 1.25,
+            _ => 1,
+        };
+        MinWidth = 104 * scale;
+        RootBorder.LayoutTransform = new ScaleTransform(scale, scale);
+    }
 
     private void ApplyTheme()
     {

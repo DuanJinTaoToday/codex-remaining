@@ -2,11 +2,35 @@ using System.Text.Json;
 
 namespace CodexRemaining.App.Infrastructure;
 
+public enum CapsuleSizePreset
+{
+    Small,
+    Medium,
+    Large,
+}
+
+public sealed record CapsuleAttachmentSettings
+{
+    public string MonitorDeviceName { get; init; } = string.Empty;
+
+    public int MonitorCenterX { get; init; }
+
+    public int MonitorCenterY { get; init; }
+
+    public CapsuleAnchor Anchor { get; init; }
+
+    public double EdgeOffsetRatio { get; init; }
+}
+
 public sealed class AppSettings
 {
     public double? Left { get; set; }
 
     public double? Top { get; set; }
+
+    public CapsuleSizePreset CapsuleSize { get; set; } = CapsuleSizePreset.Medium;
+
+    public CapsuleAttachmentSettings? Attachment { get; set; }
 }
 
 public sealed class AppSettingsStore(string filePath, LocalLogger logger)
