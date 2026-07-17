@@ -53,15 +53,12 @@ public static class WindowPlacement
             return null;
         }
 
-        var result = CapsulePlacement.Restore(
+        return RestoreOnMonitor(
+            handle,
+            nativeBounds,
+            monitor.Value,
             attachment.Anchor,
-            attachment.EdgeOffsetRatio,
-            monitor.Value.WorkArea,
-            nativeBounds.Right - nativeBounds.Left,
-            nativeBounds.Bottom - nativeBounds.Top);
-        MoveWindow(handle, nativeBounds, result.Bounds);
-
-        return CreateAttachment(monitor.Value, result.Anchor, result.EdgeOffsetRatio);
+            attachment.EdgeOffsetRatio);
     }
 
     public static CapsuleAttachmentSettings? AttachToPrimaryCorner(
@@ -79,9 +76,19 @@ public static class WindowPlacement
             return null;
         }
 
+        return RestoreOnMonitor(handle, nativeBounds, monitor, corner, edgeOffsetRatio: 0);
+    }
+
+    private static CapsuleAttachmentSettings RestoreOnMonitor(
+        IntPtr handle,
+        NativeRect nativeBounds,
+        MonitorDetails monitor,
+        CapsuleAnchor anchor,
+        double edgeOffsetRatio)
+    {
         var result = CapsulePlacement.Restore(
-            corner,
-            0,
+            anchor,
+            edgeOffsetRatio,
             monitor.WorkArea,
             nativeBounds.Right - nativeBounds.Left,
             nativeBounds.Bottom - nativeBounds.Top);
