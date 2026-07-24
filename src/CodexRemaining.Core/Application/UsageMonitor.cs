@@ -16,7 +16,8 @@ public sealed record UsageSnapshot(
     AccountSevenDayUsage? AccountUsage = null,
     DateTimeOffset? AccountRefreshedAt = null,
     LocalTodayTokenUsage? LocalUsage = null,
-    DateTimeOffset? LocalRefreshedAt = null);
+    DateTimeOffset? LocalRefreshedAt = null,
+    DateOnly? LocalUsageDate = null);
 
 public enum UsageStateKind
 {
@@ -60,6 +61,8 @@ public sealed class UsageMonitor(
         var localResult = await localTask;
         var savedSnapshot = await snapshotStore.LoadAsync(cancellationToken);
         var refreshedAt = timeProvider.GetUtcNow();
+        var localToday = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(refreshedAt, timeProvider.LocalTimeZone).DateTime);
         var weekly = Merge(
             codexResult.Usage,
             codexResult.Error,
@@ -75,8 +78,12 @@ public sealed class UsageMonitor(
         var local = Merge(
             localResult.Usage,
             localResult.Error,
-            savedSnapshot?.LocalUsage,
-            savedSnapshot?.LocalRefreshedAt,
+            savedSnapshot?.LocalUsageDate == localToday
+                ? savedSnapshot.LocalUsage
+                : null,
+            savedSnapshot?.LocalUsageDate == localToday
+                ? savedSnapshot.LocalRefreshedAt
+                : null,
             refreshedAt);
 
         if (weekly.Kind is UsageStateKind.Fresh ||
@@ -90,7 +97,8 @@ public sealed class UsageMonitor(
                     account.Value,
                     account.LastSuccessfulAt,
                     local.Value,
-                    local.LastSuccessfulAt),
+                    local.LastSuccessfulAt,
+                    local.Value is not null ? localToday : null),
                 cancellationToken);
         }
 

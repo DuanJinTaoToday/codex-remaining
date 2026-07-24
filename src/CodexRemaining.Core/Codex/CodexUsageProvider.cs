@@ -59,38 +59,69 @@ public sealed class CodexIntegrationException(
     public UsageReadErrorKind Kind { get; } = kind;
 }
 
-public sealed class CodexUsageProvider(IAppServerSessionFactory sessionFactory) : ICodexUsageProvider
+public sealed class CodexUsageProvider(
+    IAppServerSessionFactory sessionFactory,
+    TimeSpan? requestTimeout = null) : ICodexUsageProvider
 {
     public async Task<UsageReadResult> ReadAsync(CancellationToken cancellationToken)
     {
+        var weeklyTask = CreateAndReadWeeklyAsync(cancellationToken);
+        var accountTask = CreateAndReadAccountAsync(cancellationToken);
+        await Task.WhenAll(weeklyTask, accountTask);
+        var weekly = await weeklyTask;
+        var account = await accountTask;
+        return new UsageReadResult(
+            weekly.Value,
+            weekly.Error,
+            account.Value,
+            account.Error);
+    }
+
+    private async Task<MetricRead<WeeklyUsage>> CreateAndReadWeeklyAsync(
+        CancellationToken cancellationToken)
+    {
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(requestTimeout ?? TimeSpan.FromSeconds(10));
         try
         {
-            await using var session = await sessionFactory.CreateAsync(cancellationToken);
-            var weekly = await ReadWeeklyAsync(session, cancellationToken);
-            var account = await ReadAccountAsync(session, cancellationToken);
-            return new UsageReadResult(
-                weekly.Value,
-                weekly.Error,
-                account.Value,
-                account.Error);
+            await using var session = await sessionFactory.CreateAsync(timeoutSource.Token);
+            return await ReadWeeklyAsync(session, timeoutSource.Token);
         }
-        catch (CodexIntegrationException exception)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return UsageReadResult.Failure(exception.Kind, exception.Message);
+            return Failure<WeeklyUsage>(
+                UsageReadErrorKind.Timeout,
+                "读取一周用量超时，请重试。");
         }
-        catch (Exception exception) when (
-            exception is JsonException or InvalidOperationException or FormatException or OverflowException)
+        catch (Exception exception)
         {
-            return UsageReadResult.Failure(
-                UsageReadErrorKind.IncompatibleProtocol,
-                "当前 Codex 版本与用量读取协议不兼容。");
+            return MapFailure<WeeklyUsage>(
+                exception,
+                "暂时无法读取一周用量，请重试。");
         }
-        catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException or ObjectDisposedException)
+    }
+
+    private async Task<MetricRead<AccountSevenDayUsage>> CreateAndReadAccountAsync(
+        CancellationToken cancellationToken)
+    {
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(requestTimeout ?? TimeSpan.FromSeconds(10));
+        try
         {
-            return UsageReadResult.Failure(
-                UsageReadErrorKind.Unavailable,
-                "暂时无法读取 Codex 用量，请重试。");
+            await using var session = await sessionFactory.CreateAsync(timeoutSource.Token);
+            return await ReadAccountAsync(session, timeoutSource.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Failure<AccountSevenDayUsage>(
+                UsageReadErrorKind.Timeout,
+                "读取账号 Token 用量超时，请重试。");
+        }
+        catch (Exception exception)
+        {
+            return MapFailure<AccountSevenDayUsage>(
+                exception,
+                "暂时无法读取账号 Token 用量，请重试。");
         }
     }
 
@@ -240,6 +271,29 @@ public sealed class CodexUsageProvider(IAppServerSessionFactory sessionFactory) 
 
         return AccountSevenDayUsageFactory.TryCreate(values);
     }
+
+    private static MetricRead<T> MapFailure<T>(
+        Exception exception,
+        string unavailableMessage)
+        where T : class =>
+        exception switch
+        {
+            CodexIntegrationException integration =>
+                Failure<T>(integration.Kind, integration.Message),
+            JsonException or InvalidOperationException or FormatException or OverflowException =>
+                Failure<T>(
+                    UsageReadErrorKind.IncompatibleProtocol,
+                    "当前 Codex 版本与用量读取协议不兼容。"),
+            IOException or UnauthorizedAccessException or ObjectDisposedException =>
+                Failure<T>(UsageReadErrorKind.Unavailable, unavailableMessage),
+            _ => throw exception,
+        };
+
+    private static MetricRead<T> Failure<T>(
+        UsageReadErrorKind kind,
+        string message)
+        where T : class =>
+        new(null, new UsageReadError(kind, message));
 
     private sealed record MetricRead<T>(T? Value, UsageReadError? Error)
         where T : class;

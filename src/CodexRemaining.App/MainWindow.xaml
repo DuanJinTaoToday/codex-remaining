@@ -145,6 +145,7 @@
                              Minimum="0"
                              Maximum="100"
                              Value="{Binding Display.UsedPercent}"
+                             Visibility="{Binding Display.HasWeeklyUsage, Converter={StaticResource BooleanToVisibilityConverter}}"
                              Background="{DynamicResource ProgressTrackBrush}"
                              Foreground="{Binding Display.VisualState, Converter={StaticResource UsageVisualStateToBrushConverter}}" />
 

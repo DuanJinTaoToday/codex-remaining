@@ -77,6 +77,53 @@ public sealed class CodexSessionTokenUsageProviderTests
         }
     }
 
+    [Fact]
+    public async Task ExcludesParentReplayFromSubagentButCountsNewSubagentUsage()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            $"CodexRemaining.SessionUsage.Tests-{Guid.NewGuid():N}");
+        var sessions = Path.Combine(directory, "sessions", "2026", "07", "24");
+        Directory.CreateDirectory(sessions);
+        const string parentId = "11111111-1111-1111-1111-111111111111";
+        const string childId = "22222222-2222-2222-2222-222222222222";
+
+        try
+        {
+            await File.WriteAllLinesAsync(
+                Path.Combine(sessions, $"rollout-parent-{parentId}.jsonl"),
+                new[]
+                {
+                    SessionMeta("2026-07-24T02:00:00Z", parentId),
+                    TokenCount("2026-07-24T02:01:00Z", 100),
+                    TokenCount("2026-07-24T02:02:00Z", 200),
+                    """{"timestamp":"2026-07-24T02:10:00Z","type":"turn_context","payload":{}}""",
+                });
+            await File.WriteAllLinesAsync(
+                Path.Combine(sessions, $"rollout-child-{childId}.jsonl"),
+                new[]
+                {
+                    SessionMeta("2026-07-24T02:05:00Z", childId, parentId),
+                    TokenCount("2026-07-24T02:06:00Z", 100),
+                    TokenCount("2026-07-24T02:07:00Z", 200),
+                    TokenCount("2026-07-24T02:08:00Z", 350),
+                });
+            var provider = new CodexSessionTokenUsageProvider(
+                directory,
+                new FixedTimeProvider(
+                    new DateTimeOffset(2026, 7, 24, 11, 0, 0, TimeSpan.FromHours(8))));
+
+            var result = await provider.ReadAsync(CancellationToken.None);
+
+            Assert.Equal(350, result.Usage?.Tokens);
+            Assert.Null(result.Error);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static string TokenCount(string timestamp, long totalTokens) =>
         JsonSerializer.Serialize(new
         {
@@ -95,6 +142,19 @@ public sealed class CodexSessionTokenUsageProviderTests
                         total_tokens = totalTokens,
                     },
                 },
+            },
+        });
+
+    private static string SessionMeta(string timestamp, string id, string? parentId = null) =>
+        JsonSerializer.Serialize(new
+        {
+            timestamp,
+            type = "session_meta",
+            payload = new
+            {
+                id,
+                forked_from_id = parentId,
+                source = "vscode",
             },
         });
 

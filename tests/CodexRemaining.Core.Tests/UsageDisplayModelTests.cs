@@ -47,7 +47,7 @@ public sealed class UsageDisplayModelTests
         var display = UsageDisplayModel.FromState(state, ChinaTimeZone);
 
         Assert.Equal("周 5%", display.CompactText);
-        Assert.Equal("数据已过期", display.StatusText);
+        Assert.Equal("数据已过期 · 7月15日 11:20", display.StatusText);
         Assert.Equal("网络暂时不可用。", display.DetailText);
         Assert.Equal(UsageVisualState.Stale, display.VisualState);
     }
@@ -79,9 +79,33 @@ public sealed class UsageDisplayModelTests
         Assert.Equal("2914.7 万", display.AccountSevenDayText);
         Assert.Equal("29,147,000 Tokens", display.AccountSevenDayExactText);
         Assert.Equal("截至：7月23日", display.AccountThroughText);
-        Assert.Equal("数据已过期", display.AccountStatusText);
+        Assert.Equal("数据已过期 · 7月24日 10:50", display.AccountStatusText);
         Assert.Equal("286.1 万", display.LocalTodayText);
         Assert.Equal("2,861,234 Tokens", display.LocalTodayExactText);
         Assert.Equal(string.Empty, display.LocalStatusText);
+    }
+
+    [Fact]
+    public void KeepsPanelAvailableAndHidesUnknownProgressWhenWeeklyIsUnavailable()
+    {
+        var state = new UsageMonitorState(
+            UsageStateKind.Unavailable,
+            null,
+            null,
+            new UsageReadError(UsageReadErrorKind.Unavailable, "周窗口不可用。"),
+            UsageStateKind.Fresh,
+            new AccountSevenDayUsage(1_000, new DateOnly(2026, 7, 23)),
+            new DateTimeOffset(2026, 7, 24, 2, 50, 0, TimeSpan.Zero),
+            null,
+            UsageStateKind.Fresh,
+            new LocalTodayTokenUsage(500),
+            new DateTimeOffset(2026, 7, 24, 2, 55, 0, TimeSpan.Zero),
+            null);
+
+        var display = UsageDisplayModel.FromState(state, ChinaTimeZone);
+
+        Assert.False(display.HasWeeklyUsage);
+        Assert.NotEqual(UsageVisualState.Unavailable, display.VisualState);
+        Assert.Equal("-- 已用", display.UsedText);
     }
 }

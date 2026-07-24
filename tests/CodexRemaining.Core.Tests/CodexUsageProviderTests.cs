@@ -131,6 +131,40 @@ public sealed class CodexUsageProviderTests
     }
 
     [Fact]
+    public async Task KeepsWeeklyUsageWhenAccountEndpointTimesOut()
+    {
+        using var rateLimits = JsonDocument.Parse("""
+            {
+              "rateLimits": {
+                "secondary": {
+                  "usedPercent": 25,
+                  "resetsAt": 1767225800,
+                  "windowDurationMins": 10080
+                }
+              }
+            }
+            """);
+        var provider = new CodexUsageProvider(
+            new StubSessionFactory(async (method, cancellationToken) =>
+            {
+                if (method is "account/usage/read")
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+
+                return rateLimits.RootElement.Clone();
+            }),
+            TimeSpan.FromMilliseconds(20));
+
+        var result = await provider.ReadAsync(CancellationToken.None);
+
+        Assert.Equal(75, result.Usage?.RemainingPercent);
+        Assert.Null(result.Error);
+        Assert.Null(result.AccountUsage);
+        Assert.Equal(UsageReadErrorKind.Timeout, result.AccountError?.Kind);
+    }
+
+    [Fact]
     public async Task ReturnsActionableErrorWhenCodexIsNotLoggedIn()
     {
         var provider = new CodexUsageProvider(
@@ -172,7 +206,7 @@ public sealed class CodexUsageProviderTests
 
     private sealed class StubSessionFactory : IAppServerSessionFactory
     {
-        private readonly Func<string, JsonElement> responseFactory;
+        private readonly Func<string, CancellationToken, Task<JsonElement>> responseFactory;
 
         public StubSessionFactory(JsonElement response)
             : this(_ => response)
@@ -180,6 +214,12 @@ public sealed class CodexUsageProviderTests
         }
 
         public StubSessionFactory(Func<string, JsonElement> responseFactory)
+            : this((method, _) => Task.FromResult(responseFactory(method)))
+        {
+        }
+
+        public StubSessionFactory(
+            Func<string, CancellationToken, Task<JsonElement>> responseFactory)
         {
             this.responseFactory = responseFactory;
         }
@@ -188,10 +228,11 @@ public sealed class CodexUsageProviderTests
             Task.FromResult<IAppServerSession>(new StubSession(responseFactory));
     }
 
-    private sealed class StubSession(Func<string, JsonElement> responseFactory) : IAppServerSession
+    private sealed class StubSession(
+        Func<string, CancellationToken, Task<JsonElement>> responseFactory) : IAppServerSession
     {
         public Task<JsonElement> CallAsync(string method, CancellationToken cancellationToken) =>
-            Task.FromResult(responseFactory(method));
+            responseFactory(method, cancellationToken);
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

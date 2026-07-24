@@ -108,6 +108,35 @@ public sealed class UsageMonitorTests
         Assert.Equal(500, state.LocalUsage?.Tokens);
     }
 
+    [Fact]
+    public async Task DoesNotReusePreviousDaysLocalTodaySnapshot()
+    {
+        var previousAt = new DateTimeOffset(2026, 7, 23, 23, 55, 0, TimeSpan.FromHours(8));
+        var refreshedAt = previousAt.AddMinutes(10);
+        var previousSnapshot = new UsageSnapshot(
+            null,
+            null,
+            null,
+            null,
+            new LocalTodayTokenUsage(800),
+            previousAt,
+            new DateOnly(2026, 7, 23));
+        var monitor = new UsageMonitor(
+            new StubUsageProvider(UsageReadResult.Failure(
+                UsageReadErrorKind.Unavailable,
+                "账号不可用。")),
+            new MemoryUsageSnapshotStore(previousSnapshot),
+            new FixedTimeProvider(refreshedAt),
+            localTokenUsageProvider: new StubLocalTokenUsageProvider(
+                LocalTokenUsageReadResult.Failure("本机日志不可用。")));
+
+        var state = await monitor.RefreshAsync(CancellationToken.None);
+
+        Assert.Equal(UsageStateKind.Unavailable, state.LocalKind);
+        Assert.Null(state.LocalUsage);
+        Assert.Null(state.LocalLastSuccessfulAt);
+    }
+
     private sealed class StubUsageProvider(UsageReadResult result) : ICodexUsageProvider
     {
         public Task<UsageReadResult> ReadAsync(CancellationToken cancellationToken) =>
