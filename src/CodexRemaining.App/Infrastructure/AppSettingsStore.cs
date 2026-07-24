@@ -30,6 +30,8 @@ public sealed class AppSettings
 
     public CapsuleSizePreset CapsuleSize { get; set; } = CapsuleSizePreset.Medium;
 
+    public int RefreshIntervalMinutes { get; set; } = 5;
+
     public CapsuleAttachmentSettings? Attachment { get; set; }
 }
 
@@ -41,9 +43,15 @@ public sealed class AppSettingsStore(string filePath, LocalLogger logger)
     {
         try
         {
-            return File.Exists(filePath)
+            var settings = File.Exists(filePath)
                 ? JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(filePath)) ?? new AppSettings()
                 : new AppSettings();
+            if (settings.RefreshIntervalMinutes is not (1 or 5 or 10))
+            {
+                settings.RefreshIntervalMinutes = 5;
+            }
+
+            return settings;
         }
         catch (Exception exception) when (exception is IOException or JsonException)
         {

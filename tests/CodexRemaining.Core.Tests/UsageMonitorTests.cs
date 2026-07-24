@@ -70,6 +70,44 @@ public sealed class UsageMonitorTests
         Assert.Equal(UsageReadErrorKind.Timeout, state.Error?.Kind);
     }
 
+    [Fact]
+    public async Task RefreshesSourcesIndependentlyAndKeepsOnlyFailedSourceStale()
+    {
+        var previousAt = new DateTimeOffset(2026, 7, 24, 10, 0, 0, TimeSpan.FromHours(8));
+        var refreshedAt = previousAt.AddMinutes(5);
+        var previousSnapshot = new UsageSnapshot(
+            new WeeklyUsage(60, null, UsageRisk.Normal),
+            previousAt,
+            new AccountSevenDayUsage(1_000, new DateOnly(2026, 7, 23)),
+            previousAt,
+            new LocalTodayTokenUsage(200),
+            previousAt);
+        var accountError = new UsageReadError(
+            UsageReadErrorKind.Unavailable,
+            "账号 Token 用量暂时不可用。");
+        var monitor = new UsageMonitor(
+            new StubUsageProvider(
+                new UsageReadResult(
+                    new WeeklyUsage(55, null, UsageRisk.Normal),
+                    null,
+                    null,
+                    accountError)),
+            new MemoryUsageSnapshotStore(previousSnapshot),
+            new FixedTimeProvider(refreshedAt),
+            localTokenUsageProvider: new StubLocalTokenUsageProvider(
+                LocalTokenUsageReadResult.Success(500)));
+
+        var state = await monitor.RefreshAsync(CancellationToken.None);
+
+        Assert.Equal(UsageStateKind.Fresh, state.Kind);
+        Assert.Equal(55, state.Usage?.RemainingPercent);
+        Assert.Equal(UsageStateKind.Stale, state.AccountKind);
+        Assert.Equal(1_000, state.AccountUsage?.Tokens);
+        Assert.Equal(accountError, state.AccountError);
+        Assert.Equal(UsageStateKind.Fresh, state.LocalKind);
+        Assert.Equal(500, state.LocalUsage?.Tokens);
+    }
+
     private sealed class StubUsageProvider(UsageReadResult result) : ICodexUsageProvider
     {
         public Task<UsageReadResult> ReadAsync(CancellationToken cancellationToken) =>
@@ -83,6 +121,13 @@ public sealed class UsageMonitorTests
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             throw new InvalidOperationException("Unreachable");
         }
+    }
+
+    private sealed class StubLocalTokenUsageProvider(LocalTokenUsageReadResult result)
+        : ILocalTokenUsageProvider
+    {
+        public Task<LocalTokenUsageReadResult> ReadAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(result);
     }
 
     private sealed class MemoryUsageSnapshotStore(UsageSnapshot? initialSnapshot = null)

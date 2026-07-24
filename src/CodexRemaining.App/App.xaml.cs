@@ -31,10 +31,19 @@ public partial class App : System.Windows.Application
         var settings = settingsStore.Load();
         var snapshotStore = new JsonUsageSnapshotStore(paths.SnapshotFile, logger);
         var provider = new CodexUsageProvider(new CodexAppServerSessionFactory());
-        var monitor = new UsageMonitor(provider, snapshotStore, TimeProvider.System);
+        var localTokenUsageProvider = new CodexSessionTokenUsageProvider();
+        var monitor = new UsageMonitor(
+            provider,
+            snapshotStore,
+            TimeProvider.System,
+            localTokenUsageProvider: localTokenUsageProvider);
         var autoStartManager = new AutoStartManager(Environment.ProcessPath!);
 
-        viewModel = new MainWindowViewModel(monitor, logger, autoStartManager);
+        viewModel = new MainWindowViewModel(
+            monitor,
+            logger,
+            autoStartManager,
+            settings.RefreshIntervalMinutes);
         var window = new MainWindow(viewModel, settingsStore, settings);
         MainWindow = window;
 

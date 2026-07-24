@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Globalization;
 using CodexRemaining.Core.Usage;
 
 namespace CodexRemaining.Core.Codex;
@@ -18,14 +19,25 @@ public interface IAppServerSession : IAsyncDisposable
     Task<JsonElement> CallAsync(string method, CancellationToken cancellationToken);
 }
 
-public sealed record UsageReadResult(WeeklyUsage? Usage, UsageReadError? Error)
+public sealed record UsageReadResult(
+    WeeklyUsage? Usage,
+    UsageReadError? Error,
+    AccountSevenDayUsage? AccountUsage = null,
+    UsageReadError? AccountError = null)
 {
     public bool IsSuccess => Usage is not null && Error is null;
 
-    public static UsageReadResult Success(WeeklyUsage usage) => new(usage, null);
+    public static UsageReadResult Success(
+        WeeklyUsage usage,
+        AccountSevenDayUsage? accountUsage = null) =>
+        new(usage, null, accountUsage, null);
 
     public static UsageReadResult Failure(UsageReadErrorKind kind, string message) =>
-        new(null, new UsageReadError(kind, message));
+        new(
+            null,
+            new UsageReadError(kind, message),
+            null,
+            new UsageReadError(kind, message));
 }
 
 public sealed record UsageReadError(UsageReadErrorKind Kind, string Message);
@@ -54,15 +66,13 @@ public sealed class CodexUsageProvider(IAppServerSessionFactory sessionFactory) 
         try
         {
             await using var session = await sessionFactory.CreateAsync(cancellationToken);
-            var response = await session.CallAsync("account/rateLimits/read", cancellationToken);
-            var windows = ReadWindows(response);
-            var usage = WeeklyUsageFactory.TryCreate(windows);
-
-            return usage is not null
-                ? UsageReadResult.Success(usage)
-                : UsageReadResult.Failure(
-                    UsageReadErrorKind.IncompatibleProtocol,
-                    "Codex 未返回可识别的一周用量窗口。");
+            var weekly = await ReadWeeklyAsync(session, cancellationToken);
+            var account = await ReadAccountAsync(session, cancellationToken);
+            return new UsageReadResult(
+                weekly.Value,
+                weekly.Error,
+                account.Value,
+                account.Error);
         }
         catch (CodexIntegrationException exception)
         {
@@ -81,6 +91,90 @@ public sealed class CodexUsageProvider(IAppServerSessionFactory sessionFactory) 
             return UsageReadResult.Failure(
                 UsageReadErrorKind.Unavailable,
                 "暂时无法读取 Codex 用量，请重试。");
+        }
+    }
+
+    private static async Task<MetricRead<WeeklyUsage>> ReadWeeklyAsync(
+        IAppServerSession session,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await session.CallAsync("account/rateLimits/read", cancellationToken);
+            var usage = WeeklyUsageFactory.TryCreate(ReadWindows(response));
+            return usage is not null
+                ? new MetricRead<WeeklyUsage>(usage, null)
+                : new MetricRead<WeeklyUsage>(
+                    null,
+                    new UsageReadError(
+                        UsageReadErrorKind.IncompatibleProtocol,
+                        "Codex 未返回可识别的一周用量窗口。"));
+        }
+        catch (CodexIntegrationException exception)
+        {
+            return new MetricRead<WeeklyUsage>(
+                null,
+                new UsageReadError(exception.Kind, exception.Message));
+        }
+        catch (Exception exception) when (
+            exception is JsonException or InvalidOperationException or FormatException or OverflowException)
+        {
+            return new MetricRead<WeeklyUsage>(
+                null,
+                new UsageReadError(
+                    UsageReadErrorKind.IncompatibleProtocol,
+                    "当前 Codex 版本与一周用量协议不兼容。"));
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ObjectDisposedException)
+        {
+            return new MetricRead<WeeklyUsage>(
+                null,
+                new UsageReadError(
+                    UsageReadErrorKind.Unavailable,
+                    "暂时无法读取一周用量，请重试。"));
+        }
+    }
+
+    private static async Task<MetricRead<AccountSevenDayUsage>> ReadAccountAsync(
+        IAppServerSession session,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await session.CallAsync("account/usage/read", cancellationToken);
+            var usage = ReadAccountUsage(response);
+            return usage is not null
+                ? new MetricRead<AccountSevenDayUsage>(usage, null)
+                : new MetricRead<AccountSevenDayUsage>(
+                    null,
+                    new UsageReadError(
+                        UsageReadErrorKind.IncompatibleProtocol,
+                        "Codex 未返回可识别的账号 Token 用量。"));
+        }
+        catch (CodexIntegrationException exception)
+        {
+            return new MetricRead<AccountSevenDayUsage>(
+                null,
+                new UsageReadError(exception.Kind, exception.Message));
+        }
+        catch (Exception exception) when (
+            exception is JsonException or InvalidOperationException or FormatException or OverflowException)
+        {
+            return new MetricRead<AccountSevenDayUsage>(
+                null,
+                new UsageReadError(
+                    UsageReadErrorKind.IncompatibleProtocol,
+                    "当前 Codex 版本与账号 Token 用量协议不兼容。"));
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ObjectDisposedException)
+        {
+            return new MetricRead<AccountSevenDayUsage>(
+                null,
+                new UsageReadError(
+                    UsageReadErrorKind.Unavailable,
+                    "暂时无法读取账号 Token 用量，请重试。"));
         }
     }
 
@@ -116,4 +210,37 @@ public sealed class CodexUsageProvider(IAppServerSessionFactory sessionFactory) 
         property.ValueKind is JsonValueKind.Number
             ? property.GetInt64()
             : null;
+
+    private static AccountSevenDayUsage? ReadAccountUsage(JsonElement response)
+    {
+        if (!response.TryGetProperty("dailyUsageBuckets", out var buckets) ||
+            buckets.ValueKind is not JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var values = new List<AccountDailyTokenBucket>();
+        foreach (var bucket in buckets.EnumerateArray())
+        {
+            if (!bucket.TryGetProperty("startDate", out var dateElement) ||
+                !DateOnly.TryParseExact(
+                    dateElement.GetString(),
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var date) ||
+                !bucket.TryGetProperty("tokens", out var tokensElement) ||
+                !tokensElement.TryGetInt64(out var tokens))
+            {
+                continue;
+            }
+
+            values.Add(new AccountDailyTokenBucket(date, tokens));
+        }
+
+        return AccountSevenDayUsageFactory.TryCreate(values);
+    }
+
+    private sealed record MetricRead<T>(T? Value, UsageReadError? Error)
+        where T : class;
 }

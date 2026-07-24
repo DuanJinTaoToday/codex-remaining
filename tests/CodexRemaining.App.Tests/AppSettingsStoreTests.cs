@@ -17,6 +17,7 @@ public sealed class AppSettingsStoreTests
             var expected = new AppSettings
             {
                 CapsuleSize = CapsuleSizePreset.Large,
+                RefreshIntervalMinutes = 10,
                 Attachment = new CapsuleAttachmentSettings
                 {
                     MonitorDeviceName = @"\\.\DISPLAY2",
@@ -31,6 +32,7 @@ public sealed class AppSettingsStoreTests
             var actual = store.Load();
 
             Assert.Equal(CapsuleSizePreset.Large, actual.CapsuleSize);
+            Assert.Equal(10, actual.RefreshIntervalMinutes);
             Assert.Equal(expected.Attachment, actual.Attachment);
         }
         finally
@@ -39,6 +41,30 @@ public sealed class AppSettingsStoreTests
             {
                 Directory.Delete(directory, recursive: true);
             }
+        }
+    }
+
+    [Fact]
+    public void UsesFiveMinutesWhenSavedRefreshIntervalIsUnsupported()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"CodexRemaining.Tests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            var settingsPath = Path.Combine(directory, "settings.json");
+            File.WriteAllText(settingsPath, """{ "RefreshIntervalMinutes": 3 }""");
+            var store = new AppSettingsStore(
+                settingsPath,
+                new LocalLogger(Path.Combine(directory, "logs")));
+
+            var settings = store.Load();
+
+            Assert.Equal(5, settings.RefreshIntervalMinutes);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
         }
     }
 }

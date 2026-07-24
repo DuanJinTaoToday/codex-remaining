@@ -37,6 +37,100 @@ public sealed class CodexUsageProviderTests
     }
 
     [Fact]
+    public async Task ReturnsAccountSevenDayUsageFromDailyBuckets()
+    {
+        using var rateLimits = JsonDocument.Parse("""
+            {
+              "rateLimits": {
+                "secondary": {
+                  "usedPercent": 25,
+                  "resetsAt": 1767225800,
+                  "windowDurationMins": 10080
+                }
+              }
+            }
+            """);
+        using var tokenUsage = JsonDocument.Parse("""
+            {
+              "summary": {},
+              "dailyUsageBuckets": [
+                { "startDate": "2026-07-15", "tokens": 999 },
+                { "startDate": "2026-07-17", "tokens": 100 },
+                { "startDate": "2026-07-19", "tokens": 300 },
+                { "startDate": "2026-07-23", "tokens": 700 }
+              ]
+            }
+            """);
+        var provider = new CodexUsageProvider(
+            new StubSessionFactory(method =>
+                method is "account/usage/read"
+                    ? tokenUsage.RootElement.Clone()
+                    : rateLimits.RootElement.Clone()));
+
+        var result = await provider.ReadAsync(CancellationToken.None);
+
+        Assert.Equal(1_100, result.AccountUsage?.Tokens);
+        Assert.Equal(new DateOnly(2026, 7, 23), result.AccountUsage?.ThroughDate);
+        Assert.Null(result.AccountError);
+    }
+
+    [Fact]
+    public async Task KeepsWeeklyUsageWhenAccountTokenUsageFails()
+    {
+        using var rateLimits = JsonDocument.Parse("""
+            {
+              "rateLimits": {
+                "secondary": {
+                  "usedPercent": 25,
+                  "resetsAt": 1767225800,
+                  "windowDurationMins": 10080
+                }
+              }
+            }
+            """);
+        var provider = new CodexUsageProvider(
+            new StubSessionFactory(method =>
+                method is "account/usage/read"
+                    ? throw new CodexIntegrationException(
+                        UsageReadErrorKind.IncompatibleProtocol,
+                        "账号 Token 接口不可用。")
+                    : rateLimits.RootElement.Clone()));
+
+        var result = await provider.ReadAsync(CancellationToken.None);
+
+        Assert.Equal(75, result.Usage?.RemainingPercent);
+        Assert.Null(result.Error);
+        Assert.Null(result.AccountUsage);
+        Assert.Equal(UsageReadErrorKind.IncompatibleProtocol, result.AccountError?.Kind);
+    }
+
+    [Fact]
+    public async Task KeepsAccountTokenUsageWhenWeeklyUsageFails()
+    {
+        using var invalidRateLimits = JsonDocument.Parse("""{ "rateLimits": {} }""");
+        using var tokenUsage = JsonDocument.Parse("""
+            {
+              "summary": {},
+              "dailyUsageBuckets": [
+                { "startDate": "2026-07-23", "tokens": 700 }
+              ]
+            }
+            """);
+        var provider = new CodexUsageProvider(
+            new StubSessionFactory(method =>
+                method is "account/usage/read"
+                    ? tokenUsage.RootElement.Clone()
+                    : invalidRateLimits.RootElement.Clone()));
+
+        var result = await provider.ReadAsync(CancellationToken.None);
+
+        Assert.Null(result.Usage);
+        Assert.Equal(UsageReadErrorKind.IncompatibleProtocol, result.Error?.Kind);
+        Assert.Equal(700, result.AccountUsage?.Tokens);
+        Assert.Null(result.AccountError);
+    }
+
+    [Fact]
     public async Task ReturnsActionableErrorWhenCodexIsNotLoggedIn()
     {
         var provider = new CodexUsageProvider(
@@ -76,16 +170,28 @@ public sealed class CodexUsageProviderTests
         Assert.Equal(UsageReadErrorKind.IncompatibleProtocol, result.Error?.Kind);
     }
 
-    private sealed class StubSessionFactory(JsonElement response) : IAppServerSessionFactory
+    private sealed class StubSessionFactory : IAppServerSessionFactory
     {
+        private readonly Func<string, JsonElement> responseFactory;
+
+        public StubSessionFactory(JsonElement response)
+            : this(_ => response)
+        {
+        }
+
+        public StubSessionFactory(Func<string, JsonElement> responseFactory)
+        {
+            this.responseFactory = responseFactory;
+        }
+
         public Task<IAppServerSession> CreateAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IAppServerSession>(new StubSession(response));
+            Task.FromResult<IAppServerSession>(new StubSession(responseFactory));
     }
 
-    private sealed class StubSession(JsonElement response) : IAppServerSession
+    private sealed class StubSession(Func<string, JsonElement> responseFactory) : IAppServerSession
     {
         public Task<JsonElement> CallAsync(string method, CancellationToken cancellationToken) =>
-            Task.FromResult(response);
+            Task.FromResult(responseFactory(method));
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

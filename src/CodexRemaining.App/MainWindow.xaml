@@ -17,6 +17,20 @@
     <Window.ContextMenu>
         <ContextMenu Opened="ContextMenu_Opened">
             <MenuItem Header="立即刷新" Click="RefreshMenuItem_Click" />
+            <MenuItem Header="自动刷新间隔">
+                <MenuItem x:Name="OneMinuteRefreshMenuItem"
+                          Header="1 分钟"
+                          IsCheckable="True"
+                          Click="RefreshIntervalMenuItem_Click" />
+                <MenuItem x:Name="FiveMinuteRefreshMenuItem"
+                          Header="5 分钟"
+                          IsCheckable="True"
+                          Click="RefreshIntervalMenuItem_Click" />
+                <MenuItem x:Name="TenMinuteRefreshMenuItem"
+                          Header="10 分钟"
+                          IsCheckable="True"
+                          Click="RefreshIntervalMenuItem_Click" />
+            </MenuItem>
             <MenuItem x:Name="AutoStartMenuItem"
                       Header="开机自启"
                       IsCheckable="True"
@@ -54,6 +68,16 @@
 
         <StackPanel>
             <DockPanel LastChildFill="True">
+                <DockPanel.Style>
+                    <Style TargetType="DockPanel">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DockPanel.Style>
                 <Ellipse Width="8"
                          Height="8"
                          Margin="0,0,8,0"
@@ -71,34 +95,178 @@
                            Visibility="{Binding IsRefreshing, Converter={StaticResource BooleanToVisibilityConverter}}" />
             </DockPanel>
 
-            <StackPanel Margin="0,8,0,2"
-                        MinWidth="180"
-                        Visibility="{Binding IsExpanded, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <TextBlock Text="{Binding Display.StatusText}"
-                           Margin="0,0,0,3"
-                           FontWeight="SemiBold"
-                           Foreground="{Binding Display.VisualState, Converter={StaticResource UsageVisualStateToBrushConverter}}" />
-                <TextBlock Text="{Binding Display.ResetText}"
+            <StackPanel Width="320"
+                        Margin="2,1,2,2">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Codex 剩余用量"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryTextBrush}" />
+                    <StackPanel Grid.Column="1"
+                                HorizontalAlignment="Right">
+                        <Button Content="↻ 立即刷新"
+                                Margin="0,-3,-4,0"
+                                Padding="4,2"
+                                HorizontalAlignment="Right"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Foreground="{DynamicResource SecondaryTextBrush}"
+                                Click="RefreshMenuItem_Click" />
+                        <TextBlock Text="{Binding Display.UpdatedText}"
+                                   FontSize="11"
+                                   HorizontalAlignment="Right"
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="{Binding Display.RemainingText}"
+                           Margin="0,7,0,4"
+                           FontSize="28"
+                           FontWeight="Bold"
                            Foreground="{DynamicResource PrimaryTextBrush}" />
-                <TextBlock Text="{Binding Display.UpdatedText}"
-                           Margin="0,2,0,0"
-                           FontSize="12"
-                           Foreground="{DynamicResource SecondaryTextBrush}" />
+
+                <ProgressBar Height="10"
+                             Minimum="0"
+                             Maximum="100"
+                             Value="{Binding Display.UsedPercent}"
+                             Background="{DynamicResource ProgressTrackBrush}"
+                             Foreground="{Binding Display.VisualState, Converter={StaticResource UsageVisualStateToBrushConverter}}" />
+
+                <Grid Margin="0,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Display.UsedText}"
+                               FontSize="11"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Display.ResetText}"
+                               FontSize="11"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
+                </Grid>
+
+                <TextBlock Text="{Binding Display.StatusText}"
+                           Margin="0,3,0,0"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Foreground="{Binding Display.VisualState, Converter={StaticResource UsageVisualStateToBrushConverter}}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Display.StatusText}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <Border Height="1"
+                        Margin="0,9,0,9"
+                        Background="{DynamicResource DividerBrush}" />
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Margin="0,0,12,0">
+                        <TextBlock Text="本机今日 Token"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                        <TextBlock Text="{Binding Display.LocalTodayText}"
+                                   ToolTip="{Binding Display.LocalTodayExactText}"
+                                   Margin="0,3,0,0"
+                                   FontSize="17"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryTextBrush}" />
+                        <TextBlock Text="{Binding Display.LocalStatusText}"
+                                   Margin="0,2,0,0"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource SecondaryTextBrush}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Display.LocalStatusText}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <Border Grid.Column="1"
+                            Background="{DynamicResource DividerBrush}" />
+
+                    <StackPanel Grid.Column="2"
+                                Margin="12,0,0,0">
+                        <TextBlock Text="账号近 7 日 Token"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                        <TextBlock Text="{Binding Display.AccountSevenDayText}"
+                                   ToolTip="{Binding Display.AccountSevenDayExactText}"
+                                   Margin="0,3,0,0"
+                                   FontSize="17"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryTextBrush}" />
+                        <TextBlock Text="{Binding Display.AccountThroughText}"
+                                   Margin="0,2,0,0"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                        <TextBlock Text="{Binding Display.AccountStatusText}"
+                                   Margin="0,2,0,0"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource SecondaryTextBrush}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Display.AccountStatusText}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+
                 <TextBlock Text="{Binding Display.DetailText}"
-                           Margin="0,4,0,0"
-                           MaxWidth="260"
+                           Margin="0,8,0,0"
+                           MaxWidth="320"
                            TextWrapping="Wrap"
-                           FontSize="12"
-                           Foreground="{DynamicResource SecondaryTextBrush}" />
-                <Button Content="立即刷新"
-                        Margin="-4,5,0,-3"
-                        Padding="4,2"
-                        HorizontalAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Cursor="Hand"
-                        Foreground="{DynamicResource SecondaryTextBrush}"
-                        Click="RefreshMenuItem_Click" />
+                           FontSize="10"
+                           Foreground="{DynamicResource SecondaryTextBrush}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Display.DetailText}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </StackPanel>
         </StackPanel>
     </Border>

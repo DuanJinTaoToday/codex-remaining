@@ -120,6 +120,9 @@ public partial class MainWindow : Window
         SmallSizeMenuItem.IsChecked = settings.CapsuleSize is CapsuleSizePreset.Small;
         MediumSizeMenuItem.IsChecked = settings.CapsuleSize is CapsuleSizePreset.Medium;
         LargeSizeMenuItem.IsChecked = settings.CapsuleSize is CapsuleSizePreset.Large;
+        OneMinuteRefreshMenuItem.IsChecked = settings.RefreshIntervalMinutes == 1;
+        FiveMinuteRefreshMenuItem.IsChecked = settings.RefreshIntervalMinutes == 5;
+        TenMinuteRefreshMenuItem.IsChecked = settings.RefreshIntervalMinutes == 10;
     }
 
     private void AutoStartMenuItem_Click(object sender, RoutedEventArgs e) =>
@@ -135,6 +138,17 @@ public partial class MainWindow : Window
         ApplyCapsuleSize(settings.CapsuleSize);
         SavePosition();
         QueueAttachmentRestore();
+    }
+
+    private void RefreshIntervalMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        settings.RefreshIntervalMinutes = ReferenceEquals(sender, OneMinuteRefreshMenuItem)
+            ? 1
+            : ReferenceEquals(sender, TenMinuteRefreshMenuItem)
+                ? 10
+                : 5;
+        viewModel.SetRefreshInterval(settings.RefreshIntervalMinutes);
+        settingsStore.Save(settings);
     }
 
     private void ResetPositionMenuItem_Click(object sender, RoutedEventArgs e) => ResetPosition();
@@ -232,6 +246,8 @@ public partial class MainWindow : Window
         Resources["CardBackground"] = CreateBrush(isLight ? "#F7FFFFFF" : "#F7202937");
         Resources["PrimaryTextBrush"] = CreateBrush(isLight ? "#FF111827" : "#FFF9FAFB");
         Resources["SecondaryTextBrush"] = CreateBrush(isLight ? "#FF4B5563" : "#FFD1D5DB");
+        Resources["ProgressTrackBrush"] = CreateBrush(isLight ? "#FFE5E7EB" : "#FF374151");
+        Resources["DividerBrush"] = CreateBrush(isLight ? "#FFD1D5DB" : "#FF4B5563");
     }
 
     private static SolidColorBrush CreateBrush(string value) =>

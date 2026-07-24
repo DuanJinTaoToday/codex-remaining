@@ -8,5 +8,7 @@
         <SolidColorBrush x:Key="CardBackground" Color="#F7FFFFFF" />
         <SolidColorBrush x:Key="PrimaryTextBrush" Color="#FF111827" />
         <SolidColorBrush x:Key="SecondaryTextBrush" Color="#FF4B5563" />
+        <SolidColorBrush x:Key="ProgressTrackBrush" Color="#FFE5E7EB" />
+        <SolidColorBrush x:Key="DividerBrush" Color="#FFD1D5DB" />
     </Application.Resources>
 </Application>

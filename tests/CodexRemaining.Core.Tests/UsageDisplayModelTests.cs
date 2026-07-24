@@ -51,4 +51,37 @@ public sealed class UsageDisplayModelTests
         Assert.Equal("网络暂时不可用。", display.DetailText);
         Assert.Equal(UsageVisualState.Stale, display.VisualState);
     }
+
+    [Fact]
+    public void ExpandedUsageFormatsIndependentAccountAndLocalTokenStates()
+    {
+        var state = new UsageMonitorState(
+            UsageStateKind.Fresh,
+            new WeeklyUsage(
+                66,
+                new DateTimeOffset(2026, 7, 25, 4, 18, 0, TimeSpan.Zero),
+                UsageRisk.Normal),
+            new DateTimeOffset(2026, 7, 24, 2, 55, 0, TimeSpan.Zero),
+            null,
+            UsageStateKind.Stale,
+            new AccountSevenDayUsage(29_147_000, new DateOnly(2026, 7, 23)),
+            new DateTimeOffset(2026, 7, 24, 2, 50, 0, TimeSpan.Zero),
+            new UsageReadError(UsageReadErrorKind.Unavailable, "账号统计延迟。"),
+            UsageStateKind.Fresh,
+            new LocalTodayTokenUsage(2_861_234),
+            new DateTimeOffset(2026, 7, 24, 2, 55, 0, TimeSpan.Zero),
+            null);
+
+        var display = UsageDisplayModel.FromState(state, ChinaTimeZone);
+
+        Assert.Equal(34, display.UsedPercent);
+        Assert.Equal("66% 剩余", display.RemainingText);
+        Assert.Equal("2914.7 万", display.AccountSevenDayText);
+        Assert.Equal("29,147,000 Tokens", display.AccountSevenDayExactText);
+        Assert.Equal("截至：7月23日", display.AccountThroughText);
+        Assert.Equal("数据已过期", display.AccountStatusText);
+        Assert.Equal("286.1 万", display.LocalTodayText);
+        Assert.Equal("2,861,234 Tokens", display.LocalTodayExactText);
+        Assert.Equal(string.Empty, display.LocalStatusText);
+    }
 }

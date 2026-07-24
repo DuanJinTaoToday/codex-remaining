@@ -9,27 +9,32 @@ namespace CodexRemaining.App;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
-
     private readonly UsageMonitor monitor;
     private readonly LocalLogger logger;
     private readonly AutoStartManager autoStartManager;
     private readonly CancellationTokenSource lifetime = new();
     private readonly SemaphoreSlim refreshLock = new(1, 1);
+    private readonly object refreshScheduleLock = new();
     private UsageDisplayModel display;
     private bool isExpanded;
     private bool isRefreshing;
     private bool isAutoStartEnabled;
+    private int refreshIntervalMinutes;
+    private CancellationTokenSource refreshScheduleChanged = new();
     private Task? periodicRefreshTask;
 
     public MainWindowViewModel(
         UsageMonitor monitor,
         LocalLogger logger,
-        AutoStartManager autoStartManager)
+        AutoStartManager autoStartManager,
+        int refreshIntervalMinutes = 5)
     {
         this.monitor = monitor;
         this.logger = logger;
         this.autoStartManager = autoStartManager;
+        this.refreshIntervalMinutes = IsSupportedRefreshInterval(refreshIntervalMinutes)
+            ? refreshIntervalMinutes
+            : 5;
         isAutoStartEnabled = autoStartManager.IsEnabled;
         display = UsageDisplayModel.FromState(
             new UsageMonitorState(UsageStateKind.Loading, null, null, null),
@@ -62,6 +67,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         private set => SetProperty(ref isAutoStartEnabled, value);
     }
 
+    public int RefreshIntervalMinutes
+    {
+        get => refreshIntervalMinutes;
+        private set => SetProperty(ref refreshIntervalMinutes, value);
+    }
+
     public async Task StartAsync()
     {
         await RefreshAsync();
@@ -81,9 +92,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             var state = await monitor.RefreshAsync(lifetime.Token);
             Display = UsageDisplayModel.FromState(state, TimeZoneInfo.Local);
 
-            if (state.Error is not null)
+            var errors = new[] { state.Error, state.AccountError, state.LocalError }
+                .Where(error => error is not null)
+                .Select(error => error!.Kind)
+                .Distinct()
+                .ToArray();
+            if (errors.Length > 0)
             {
-                logger.Info($"刷新失败: {state.Error.Kind}");
+                logger.Info($"刷新部分失败: {string.Join(", ", errors)}");
             }
             else
             {
@@ -125,20 +141,62 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public void SetRefreshInterval(int minutes)
+    {
+        if (!IsSupportedRefreshInterval(minutes) || minutes == RefreshIntervalMinutes)
+        {
+            return;
+        }
+
+        CancellationTokenSource previousSchedule;
+        lock (refreshScheduleLock)
+        {
+            RefreshIntervalMinutes = minutes;
+            previousSchedule = refreshScheduleChanged;
+            refreshScheduleChanged = new CancellationTokenSource();
+        }
+
+        previousSchedule.Cancel();
+        previousSchedule.Dispose();
+    }
+
     public void Dispose()
     {
         lifetime.Cancel();
+        lock (refreshScheduleLock)
+        {
+            refreshScheduleChanged.Cancel();
+            refreshScheduleChanged.Dispose();
+        }
         lifetime.Dispose();
     }
 
     private async Task RunPeriodicRefreshAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(RefreshInterval);
-
         try
         {
-            while (await timer.WaitForNextTickAsync(cancellationToken))
+            while (!cancellationToken.IsCancellationRequested)
             {
+                CancellationToken scheduleChangedToken;
+                TimeSpan interval;
+                lock (refreshScheduleLock)
+                {
+                    scheduleChangedToken = refreshScheduleChanged.Token;
+                    interval = TimeSpan.FromMinutes(RefreshIntervalMinutes);
+                }
+
+                using var waitSource = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    scheduleChangedToken);
+                try
+                {
+                    await Task.Delay(interval, waitSource.Token);
+                }
+                catch (OperationCanceledException) when (scheduleChangedToken.IsCancellationRequested)
+                {
+                    continue;
+                }
+
                 await RefreshAsync();
             }
         }
@@ -146,6 +204,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         {
         }
     }
+
+    private static bool IsSupportedRefreshInterval(int minutes) =>
+        minutes is 1 or 5 or 10;
 
     private void SetProperty<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
