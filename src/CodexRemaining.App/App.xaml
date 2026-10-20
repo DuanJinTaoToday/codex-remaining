@@ -5,10 +5,13 @@
     <Application.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <local:UsageVisualStateToBrushConverter x:Key="UsageVisualStateToBrushConverter" />
-        <SolidColorBrush x:Key="CardBackground" Color="#F7FFFFFF" />
-        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#FF111827" />
+        <SolidColorBrush x:Key="CardBackground" Color="#FFFCFCFD" />
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#FF20252E" />
         <SolidColorBrush x:Key="SecondaryTextBrush" Color="#FF4B5563" />
-        <SolidColorBrush x:Key="ProgressTrackBrush" Color="#FFE5E7EB" />
-        <SolidColorBrush x:Key="DividerBrush" Color="#FFD1D5DB" />
+        <SolidColorBrush x:Key="ProgressTrackBrush" Color="#FFE5E9ED" />
+        <SolidColorBrush x:Key="DividerBrush" Color="#FFE5E9ED" />
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#FFD9DEE5" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#FFF0F3F5" />
+        <SolidColorBrush x:Key="AccentSurfaceBrush" Color="#FFFFF0D4" />
     </Application.Resources>
 </Application>

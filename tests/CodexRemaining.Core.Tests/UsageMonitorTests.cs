@@ -137,6 +137,27 @@ public sealed class UsageMonitorTests
         Assert.Null(state.LocalLastSuccessfulAt);
     }
 
+    [Fact]
+    public async Task PersistsCreditSuccessAndRetainsItAsStaleOnFailure()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var cards = new ResetCredits(3, now.AddDays(2), true);
+        var store = new MemoryUsageSnapshotStore();
+        var monitor = new UsageMonitor(new StubUsageProvider(new UsageReadResult(null, null,
+            ResetCredits: cards)), store, new FixedTimeProvider(now));
+        var fresh = await monitor.RefreshAsync(CancellationToken.None);
+        Assert.Equal(UsageStateKind.Fresh, fresh.ResetCreditsKind);
+        Assert.Equal(cards, (await store.LoadAsync(CancellationToken.None))?.ResetCredits);
+
+        var failed = new UsageMonitor(new StubUsageProvider(UsageReadResult.Failure(UsageReadErrorKind.Unavailable, "离线")),
+            store, new FixedTimeProvider(now.AddMinutes(5)));
+        var stale = await failed.RefreshAsync(CancellationToken.None);
+        Assert.Equal(UsageStateKind.Stale, stale.ResetCreditsKind);
+        Assert.Equal(cards, stale.ResetCredits);
+        Assert.Equal(now, stale.ResetCreditsLastSuccessfulAt);
+        Assert.Equal(UsageStateKind.Unavailable, stale.Kind);
+    }
+
     private sealed class StubUsageProvider(UsageReadResult result) : ICodexUsageProvider
     {
         public Task<UsageReadResult> ReadAsync(CancellationToken cancellationToken) =>

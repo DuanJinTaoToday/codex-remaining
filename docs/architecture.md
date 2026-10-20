@@ -18,20 +18,21 @@ flowchart LR
 
 ### Presentation
 
-WPF 只负责悬浮胶囊的展示与交互。它消费应用状态，不解析 Codex 协议，也不直接读写注册表或本地文件。
+WPF 只负责悬浮胶囊的展示与交互。进度条绑定剩余比例；界面每 30 秒根据当前时间重算重置和卡片到期倒计时，不增加网络请求。它消费应用状态，不解析 Codex 协议，也不直接读写注册表或本地文件。
 
 ### Application
 
-协调启动刷新、可配置周期刷新、手动刷新和重复启动刷新。自动刷新支持 1、5、10 分钟，默认 5 分钟；任一时刻只允许一个刷新操作。一周窗口、账号近 7 日 Token 和本机今日 Token 分别转换为 `Fresh`、`Stale` 或 `Unavailable` 状态。
+协调启动刷新、可配置周期刷新、手动刷新和重复启动刷新。自动刷新支持 1、5、10 分钟，默认 5 分钟；任一时刻只允许一个刷新操作。一周窗口、重置卡、账号近 7 日 Token 和本机今日 Token 分别转换为 `Fresh`、`Stale` 或 `Unavailable` 状态。
 
 ### Domain
 
-领域模型表达三项相互独立的用量：
+领域模型表达额度、重置卡和 Token 用量：
 
 - `remainingPercent = 100 - usedPercent`
 - 通过 `windowDurationMins == 10080` 识别一周窗口
 - 账号近 7 日 Token 以账号侧最新可用日期为截止日，汇总连续 7 个自然日
 - 本机今日 Token 以本机时区自然日为边界，汇总本机 Codex 会话中 Token 事件的真实增量
+- 重置卡数量以 `availableCount` 为准；到期明细可缺失或被截断，保留是否完整的标记，不用明细条数替代可用数量
 - 正常：`remainingPercent > 20`
 - 警告：`10 <= remainingPercent <= 20`
 - 危险：`remainingPercent < 10`
@@ -40,7 +41,7 @@ WPF 只负责悬浮胶囊的展示与交互。它消费应用状态，不解析 
 
 ### Codex integration
 
-`CodexUsageProvider` 发现本机 `codex.exe`，以子进程方式启动 `codex app-server`，初始化协议后分别调用 `account/rateLimits/read` 和 `account/usage/read`。前者提供一周窗口，后者提供账号每日 Token bucket；账号近 7 日按最新 bucket 日期汇总并显式保留截止日期。它只向上层返回必要字段，不暴露认证数据或完整响应；应用退出时只终止自己创建的子进程。
+`CodexUsageProvider` 发现本机 `codex.exe`，以子进程方式启动 `codex app-server`，初始化协议后分别调用 `account/rateLimits/read` 和 `account/usage/read`。前者提供一周窗口和 `rateLimitResetCredits`，两者独立解析、缓存并标记失败，缺少重置卡字段不影响周额度。多桶响应优先选择 `rateLimitsByLimitId.codex`，否则回退 `rateLimits`。后者提供账号每日 Token bucket；账号近 7 日按最新 bucket 日期汇总并显式保留截止日期。它只向上层返回必要字段，不暴露认证数据或完整响应；应用退出时只终止自己创建的子进程。
 
 本机 Token 读取器只读扫描当前 Codex 配置目录下的 `sessions` 与 `archived_sessions` JSONL 文件，解析 `event_msg.token_count` 的累计 Token 并计算增量。它按事件时间转换到本机时区，只汇总当天数据；损坏或无关日志行被忽略，不读取对话正文。
 
@@ -68,3 +69,7 @@ WPF 只负责悬浮胶囊的展示与交互。它消费应用状态，不解析 
 ## 打包
 
 应用使用 C#、.NET 10 和 WPF，发布为 `win-x64` 自包含程序。使用面向当前用户的安装脚本生成 `CodexRemaining-Setup.exe`，安装到 `%LOCALAPPDATA%\Programs\CodexRemaining` 并注册标准卸载入口；MVP 不签名、不自动更新。
+
+## 协议参考
+
+- [官方 App Server 额度与重置卡字段](https://learn.chatgpt.com/docs/app-server#6-rate-limits-chatgpt)

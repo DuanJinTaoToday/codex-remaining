@@ -243,11 +243,14 @@ public partial class MainWindow : Window
     private void ApplyTheme()
     {
         var isLight = ThemeDetector.IsLightTheme();
-        Resources["CardBackground"] = CreateBrush(isLight ? "#F7FFFFFF" : "#F7202937");
-        Resources["PrimaryTextBrush"] = CreateBrush(isLight ? "#FF111827" : "#FFF9FAFB");
+        Resources["CardBackground"] = CreateBrush(isLight ? "#FFFCFCFD" : "#FF181C23");
+        Resources["PrimaryTextBrush"] = CreateBrush(isLight ? "#FF20252E" : "#FFF1F3F5");
         Resources["SecondaryTextBrush"] = CreateBrush(isLight ? "#FF4B5563" : "#FFD1D5DB");
-        Resources["ProgressTrackBrush"] = CreateBrush(isLight ? "#FFE5E7EB" : "#FF374151");
-        Resources["DividerBrush"] = CreateBrush(isLight ? "#FFD1D5DB" : "#FF4B5563");
+        Resources["ProgressTrackBrush"] = CreateBrush(isLight ? "#FFE5E9ED" : "#FF303741");
+        Resources["DividerBrush"] = CreateBrush(isLight ? "#FFE5E9ED" : "#FF303741");
+        Resources["CardBorderBrush"] = CreateBrush(isLight ? "#FFD9DEE5" : "#FF343C48");
+        Resources["SurfaceBrush"] = CreateBrush(isLight ? "#FFF0F3F5" : "#FF222831");
+        Resources["AccentSurfaceBrush"] = CreateBrush(isLight ? "#FFFFF0D4" : "#FF463723");
     }
 
     private static SolidColorBrush CreateBrush(string value) =>

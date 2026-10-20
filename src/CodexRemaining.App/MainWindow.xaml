@@ -55,48 +55,91 @@
         </ContextMenu>
     </Window.ContextMenu>
 
-    <Border x:Name="RootBorder"
-            Padding="14,8"
-            CornerRadius="18"
-            Background="{DynamicResource CardBackground}"
-            BorderThickness="1.5"
-            BorderBrush="{Binding Display.VisualState, Converter={StaticResource UsageVisualStateToBrushConverter}}"
-            SnapsToDevicePixels="True">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.22" />
-        </Border.Effect>
+    <Window.Resources>
+        <Style x:Key="SecondaryText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+        </Style>
+        <Style x:Key="OptionalStatus" TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+            <Style.Triggers>
+                <Trigger Property="Text" Value="">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="RefreshButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonSurface" CornerRadius="5" Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource SurfaceBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource SecondaryTextBrush}" />
+                                <Setter TargetName="ButtonSurface" Property="BorderThickness" Value="1" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
 
+    <Border x:Name="RootBorder" MinWidth="104" Background="{DynamicResource CardBackground}"
+            UseLayoutRounding="True" SnapsToDevicePixels="True"
+            TextElement.FontFamily="Segoe UI"
+            TextElement.Foreground="{DynamicResource PrimaryTextBrush}">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="Padding" Value="14,8" />
+                <Setter Property="CornerRadius" Value="18" />
+                <Setter Property="BorderThickness" Value="1.5" />
+                <Setter Property="BorderBrush" Value="{Binding Display.VisualState, Converter={StaticResource UsageVisualStateToBrushConverter}}" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                        <Setter Property="Padding" Value="16,12" />
+                        <Setter Property="CornerRadius" Value="16" />
+                        <Setter Property="BorderThickness" Value="1" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.18" />
+        </Border.Effect>
         <StackPanel>
-            <DockPanel LastChildFill="True">
-                <DockPanel.Style>
-                    <Style TargetType="DockPanel">
-                        <Setter Property="Visibility" Value="Visible" />
+            <StackPanel Orientation="Horizontal" ToolTip="{Binding Display.ResetExactText}">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsExpanded}" Value="True">
                                 <Setter Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
-                </DockPanel.Style>
-                <Ellipse Width="8"
-                         Height="8"
-                         Margin="0,0,8,0"
-                         VerticalAlignment="Center"
+                </StackPanel.Style>
+                <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
                          Fill="{Binding Display.VisualState, Converter={StaticResource UsageVisualStateToBrushConverter}}" />
-                <TextBlock Text="{Binding Display.CompactText}"
-                           FontSize="14"
-                           FontWeight="SemiBold"
-                           Foreground="{DynamicResource PrimaryTextBrush}"
-                           VerticalAlignment="Center" />
-                <TextBlock Text=" ↻"
-                           Margin="6,0,0,0"
-                           FontSize="13"
+                <TextBlock Text="{Binding Display.CompactText}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text=" ↻" Margin="6,0,0,0" FontSize="13" VerticalAlignment="Center"
                            Foreground="{DynamicResource SecondaryTextBrush}"
                            Visibility="{Binding IsRefreshing, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            </DockPanel>
+            </StackPanel>
 
-            <StackPanel Width="320"
-                        Margin="2,1,2,2">
+            <StackPanel Width="320">
                 <StackPanel.Style>
                     <Style TargetType="StackPanel">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -107,167 +150,81 @@
                         </Style.Triggers>
                     </Style>
                 </StackPanel.Style>
-
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Codex 剩余用量"
-                               FontSize="15"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource PrimaryTextBrush}" />
-                    <StackPanel Grid.Column="1"
-                                HorizontalAlignment="Right">
-                        <Button Content="↻ 立即刷新"
-                                Margin="0,-3,-4,0"
-                                Padding="4,2"
-                                HorizontalAlignment="Right"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                Click="RefreshMenuItem_Click" />
-                        <TextBlock Text="{Binding Display.UpdatedText}"
-                                   FontSize="11"
-                                   HorizontalAlignment="Right"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                    <TextBlock Text="Codex 剩余用量" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Top" Margin="0,2,8,0" />
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                        <Button Content="↻ 立即刷新" Style="{StaticResource RefreshButton}" HorizontalAlignment="Right"
+                                Margin="0,-3,-4,0" AutomationProperties.Name="立即刷新" Click="RefreshMenuItem_Click" />
+                        <TextBlock Text="{Binding Display.UpdatedText}" Style="{StaticResource SecondaryText}"
+                                   FontSize="11.5" HorizontalAlignment="Right" />
                     </StackPanel>
                 </Grid>
 
-                <TextBlock Text="{Binding Display.RemainingText}"
-                           Margin="0,7,0,4"
-                           FontSize="28"
-                           FontWeight="Bold"
-                           Foreground="{DynamicResource PrimaryTextBrush}" />
-
-                <ProgressBar Height="10"
-                             Minimum="0"
-                             Maximum="100"
-                             Value="{Binding Display.UsedPercent}"
-                             Visibility="{Binding Display.HasWeeklyUsage, Converter={StaticResource BooleanToVisibilityConverter}}"
-                             Background="{DynamicResource ProgressTrackBrush}"
-                             Foreground="{Binding Display.VisualState, Converter={StaticResource UsageVisualStateToBrushConverter}}" />
-
-                <Grid Margin="0,4,0,0">
+                <Grid Margin="0,9,0,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding Display.UsedText}"
-                               FontSize="11"
-                               Foreground="{DynamicResource SecondaryTextBrush}" />
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding Display.ResetText}"
-                               FontSize="11"
+                    <TextBlock Text="{Binding Display.RemainingText}" FontSize="25" FontWeight="SemiBold" Margin="0,0,10,0" />
+                    <TextBlock Grid.Column="1" Text="{Binding Display.ResetText}" ToolTip="{Binding Display.ResetExactText}"
+                               FontSize="12.5" VerticalAlignment="Center" HorizontalAlignment="Right" TextWrapping="Wrap"
                                Foreground="{DynamicResource SecondaryTextBrush}" />
                 </Grid>
+                <ProgressBar Height="6" Margin="0,6,0,0" Minimum="0" Maximum="100"
+                             Value="{Binding Display.RemainingPercent, Mode=OneWay}"
+                             Visibility="{Binding Display.HasWeeklyUsage, Converter={StaticResource BooleanToVisibilityConverter}}"
+                             Background="{DynamicResource ProgressTrackBrush}"
+                             Foreground="{Binding Display.VisualState, Converter={StaticResource UsageVisualStateToBrushConverter}}">
+                    <ProgressBar.Template>
+                        <ControlTemplate TargetType="ProgressBar">
+                            <Grid x:Name="PART_Track">
+                                <Border Background="{TemplateBinding Background}" CornerRadius="3" />
+                                <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
+                                        Background="{TemplateBinding Foreground}" CornerRadius="3" />
+                            </Grid>
+                        </ControlTemplate>
+                    </ProgressBar.Template>
+                </ProgressBar>
+                <TextBlock Text="{Binding Display.StatusText}" Style="{StaticResource OptionalStatus}" />
 
-                <TextBlock Text="{Binding Display.StatusText}"
-                           Margin="0,3,0,0"
-                           FontSize="11"
-                           FontWeight="SemiBold"
-                           Foreground="{Binding Display.VisualState, Converter={StaticResource UsageVisualStateToBrushConverter}}">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Visible" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Display.StatusText}" Value="">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <Grid Margin="0,11,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Display.ResetCreditsText}" FontSize="13" FontWeight="SemiBold" Margin="0,0,10,0" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding Display.ResetCreditExpiryText}" ToolTip="{Binding Display.ResetCreditExpiryExactText}"
+                               Style="{StaticResource SecondaryText}" TextWrapping="Wrap" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
+                <TextBlock Text="{Binding Display.ResetCreditsStatusText}" Style="{StaticResource OptionalStatus}" />
 
-                <Border Height="1"
-                        Margin="0,9,0,9"
-                        Background="{DynamicResource DividerBrush}" />
-
+                <Border Height="1" Margin="0,10,0,10" Background="{DynamicResource DividerBrush}" />
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="1" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-
                     <StackPanel Margin="0,0,12,0">
-                        <TextBlock Text="本机今日 Token"
-                                   FontSize="11"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
-                        <TextBlock Text="{Binding Display.LocalTodayText}"
-                                   ToolTip="{Binding Display.LocalTodayExactText}"
-                                   Margin="0,3,0,0"
-                                   FontSize="17"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryTextBrush}" />
-                        <TextBlock Text="{Binding Display.LocalStatusText}"
-                                   Margin="0,2,0,0"
-                                   FontSize="10"
-                                   Foreground="{DynamicResource SecondaryTextBrush}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Display.LocalStatusText}" Value="">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+                        <TextBlock Text="本机今日 Token" Style="{StaticResource SecondaryText}" />
+                        <TextBlock Text="{Binding Display.LocalTodayText}" ToolTip="{Binding Display.LocalTodayExactText}"
+                                   FontSize="20" FontWeight="SemiBold" Margin="0,3,0,0" />
+                        <TextBlock Text="{Binding Display.LocalStatusText}" Style="{StaticResource OptionalStatus}" />
                     </StackPanel>
-
-                    <Border Grid.Column="1"
-                            Background="{DynamicResource DividerBrush}" />
-
-                    <StackPanel Grid.Column="2"
-                                Margin="12,0,0,0">
-                        <TextBlock Text="账号近 7 日 Token"
-                                   FontSize="11"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
-                        <TextBlock Text="{Binding Display.AccountSevenDayText}"
-                                   ToolTip="{Binding Display.AccountSevenDayExactText}"
-                                   Margin="0,3,0,0"
-                                   FontSize="17"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryTextBrush}" />
-                        <TextBlock Text="{Binding Display.AccountThroughText}"
-                                   Margin="0,2,0,0"
-                                   FontSize="10"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
-                        <TextBlock Text="{Binding Display.AccountStatusText}"
-                                   Margin="0,2,0,0"
-                                   FontSize="10"
-                                   Foreground="{DynamicResource SecondaryTextBrush}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Display.AccountStatusText}" Value="">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+                    <Border Grid.Column="1" Background="{DynamicResource DividerBrush}" Margin="0,1,0,0" />
+                    <StackPanel Grid.Column="2" Margin="12,0,0,0">
+                        <TextBlock Text="账号近 7 日 Token" Style="{StaticResource SecondaryText}" />
+                        <TextBlock Text="{Binding Display.AccountSevenDayText}" ToolTip="{Binding Display.AccountSevenDayExactText}"
+                                   FontSize="20" FontWeight="SemiBold" Margin="0,3,0,0" />
+                        <TextBlock Text="{Binding Display.AccountThroughText}" Style="{StaticResource SecondaryText}" Margin="0,2,0,0" />
+                        <TextBlock Text="{Binding Display.AccountStatusText}" Style="{StaticResource OptionalStatus}" />
                     </StackPanel>
                 </Grid>
-
-                <TextBlock Text="{Binding Display.DetailText}"
-                           Margin="0,8,0,0"
-                           MaxWidth="320"
-                           TextWrapping="Wrap"
-                           FontSize="10"
-                           Foreground="{DynamicResource SecondaryTextBrush}">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Display.DetailText}" Value="">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <TextBlock Text="{Binding Display.DetailText}" Style="{StaticResource OptionalStatus}" Margin="0,6,0,0" />
             </StackPanel>
         </StackPanel>
     </Border>

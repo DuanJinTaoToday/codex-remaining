@@ -16,6 +16,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly SemaphoreSlim refreshLock = new(1, 1);
     private readonly object refreshScheduleLock = new();
     private UsageDisplayModel display;
+    private UsageMonitorState? lastState;
+    private readonly System.Windows.Threading.DispatcherTimer countdownTimer;
     private bool isExpanded;
     private bool isRefreshing;
     private bool isAutoStartEnabled;
@@ -35,6 +37,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         this.refreshIntervalMinutes = IsSupportedRefreshInterval(refreshIntervalMinutes)
             ? refreshIntervalMinutes
             : 5;
+        countdownTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        countdownTimer.Tick += UpdateCountdown;
+        countdownTimer.Start();
         isAutoStartEnabled = autoStartManager.IsEnabled;
         display = UsageDisplayModel.FromState(
             new UsageMonitorState(UsageStateKind.Loading, null, null, null),
@@ -90,9 +95,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         {
             IsRefreshing = true;
             var state = await monitor.RefreshAsync(lifetime.Token);
+            lastState = state;
             Display = UsageDisplayModel.FromState(state, TimeZoneInfo.Local);
 
-            var errors = new[] { state.Error, state.AccountError, state.LocalError }
+            var errors = new[] { state.Error, state.AccountError, state.LocalError, state.ResetCreditsError }
                 .Where(error => error is not null)
                 .Select(error => error!.Kind)
                 .Distinct()
@@ -112,6 +118,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception exception)
         {
             logger.Error("刷新发生未预期错误", exception);
+            lastState = null;
             Display = UsageDisplayModel.FromState(
                 new UsageMonitorState(
                     UsageStateKind.Unavailable,
@@ -160,8 +167,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         previousSchedule.Dispose();
     }
 
+    private void UpdateCountdown(object? sender, EventArgs e)
+    {
+        if (lastState is not null)
+            Display = UsageDisplayModel.FromState(lastState, TimeZoneInfo.Local);
+    }
+
     public void Dispose()
     {
+        countdownTimer.Stop();
+        countdownTimer.Tick -= UpdateCountdown;
         lifetime.Cancel();
         lock (refreshScheduleLock)
         {

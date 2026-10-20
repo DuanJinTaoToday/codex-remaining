@@ -204,6 +204,76 @@ public sealed class CodexUsageProviderTests
         Assert.Equal(UsageReadErrorKind.IncompatibleProtocol, result.Error?.Kind);
     }
 
+    [Theory]
+    [InlineData("null", null, false)]
+    [InlineData("[]", null, false)]
+    [InlineData("[{\"status\":\"available\",\"expiresAt\":1792700000}]", 1792700000L, false)]
+    [InlineData("[{\"status\":\"available\",\"expiresAt\":1792800000},{\"status\":\"available\",\"expiresAt\":1792700000},{\"status\":\"available\",\"expiresAt\":1792900000}]", 1792700000L, true)]
+    public async Task ReadsAuthoritativeCreditCountAndEarliestKnownExpiry(string rows, long? earliest, bool complete)
+    {
+        using var response = JsonDocument.Parse($$$"""
+            {"rateLimits":{"secondary":{"usedPercent":6,"windowDurationMins":10080}},
+             "rateLimitResetCredits":{"availableCount":3,"credits":{{{rows}}}}}
+            """);
+        var result = await new CodexUsageProvider(new StubSessionFactory(response.RootElement.Clone())).ReadAsync(CancellationToken.None);
+        Assert.Equal(94, result.Usage?.RemainingPercent);
+        Assert.Equal(3, result.ResetCredits?.AvailableCount);
+        Assert.Equal(earliest.HasValue ? DateTimeOffset.FromUnixTimeSeconds(earliest.Value) : (DateTimeOffset?)null, result.ResetCredits?.NearestExpiresAt);
+        Assert.Equal(complete, result.ResetCredits?.HasCompleteExpiryDetails);
+        Assert.Null(result.ResetCreditsError);
+    }
+
+    [Fact]
+    public async Task KeepsCreditsWhenWeeklyWindowIsMalformedAndKeepsWeeklyWhenCreditsAreMalformed()
+    {
+        using var response = JsonDocument.Parse("""
+            {"rateLimits":{"secondary":{"usedPercent":"bad","windowDurationMins":10080}},
+             "rateLimitResetCredits":{"availableCount":0,"credits":[]}}
+            """);
+        var result = await new CodexUsageProvider(new StubSessionFactory(response.RootElement.Clone())).ReadAsync(CancellationToken.None);
+        Assert.NotNull(result.Error);
+        Assert.Equal(0, result.ResetCredits?.AvailableCount);
+        Assert.Null(result.ResetCreditsError);
+
+        using var malformed = JsonDocument.Parse("""
+            {"rateLimits":{"secondary":{"usedPercent":6,"windowDurationMins":10080}},
+             "rateLimitResetCredits":{"availableCount":"bad"}}
+            """);
+        result = await new CodexUsageProvider(new StubSessionFactory(malformed.RootElement.Clone())).ReadAsync(CancellationToken.None);
+        Assert.Equal(94, result.Usage?.RemainingPercent);
+        Assert.Null(result.Error);
+        Assert.Null(result.ResetCredits);
+        Assert.NotNull(result.ResetCreditsError);
+    }
+
+    [Fact]
+    public async Task MissingCreditsAreUnknownRatherThanZero()
+    {
+        using var response = JsonDocument.Parse("""
+            {"rateLimits":{"secondary":{"usedPercent":6,"windowDurationMins":10080}}}
+            """);
+        var result = await new CodexUsageProvider(new StubSessionFactory(response.RootElement.Clone())).ReadAsync(CancellationToken.None);
+        Assert.Equal(94, result.Usage?.RemainingPercent);
+        Assert.Null(result.ResetCredits);
+        Assert.NotNull(result.ResetCreditsError);
+    }
+
+    [Fact]
+    public async Task PrefersCodexBucketAndIgnoresConsumedCardExpirations()
+    {
+        using var response = JsonDocument.Parse("""
+            {"rateLimits":{"secondary":{"usedPercent":90,"windowDurationMins":10080}},
+             "rateLimitsByLimitId":{"codex":{"secondary":{"usedPercent":6,"windowDurationMins":10080}}},
+             "rateLimitResetCredits":{"availableCount":1,"credits":[
+                 {"status":"consumed","expiresAt":1792600000},
+                 {"status":"available","expiresAt":1792800000}]}}
+            """);
+        var result = await new CodexUsageProvider(new StubSessionFactory(response.RootElement.Clone())).ReadAsync(CancellationToken.None);
+        Assert.Equal(94, result.Usage?.RemainingPercent);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1792800000), result.ResetCredits?.NearestExpiresAt);
+        Assert.True(result.ResetCredits?.HasCompleteExpiryDetails);
+    }
+
     private sealed class StubSessionFactory : IAppServerSessionFactory
     {
         private readonly Func<string, CancellationToken, Task<JsonElement>> responseFactory;

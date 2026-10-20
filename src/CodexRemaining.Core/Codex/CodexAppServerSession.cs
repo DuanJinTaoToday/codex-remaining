@@ -221,7 +221,7 @@ internal sealed class CodexAppServerSession(Process process) : IAppServerSession
             {
                 name = "codex-remaining",
                 title = "Codex Remaining",
-                version = "0.1.1",
+                version = "0.2.0",
             },
             capabilities = new
             {

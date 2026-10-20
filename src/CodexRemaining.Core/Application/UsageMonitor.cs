@@ -17,7 +17,9 @@ public sealed record UsageSnapshot(
     DateTimeOffset? AccountRefreshedAt = null,
     LocalTodayTokenUsage? LocalUsage = null,
     DateTimeOffset? LocalRefreshedAt = null,
-    DateOnly? LocalUsageDate = null);
+    DateOnly? LocalUsageDate = null,
+    ResetCredits? ResetCredits = null,
+    DateTimeOffset? ResetCreditsRefreshedAt = null);
 
 public enum UsageStateKind
 {
@@ -39,7 +41,11 @@ public sealed record UsageMonitorState(
     UsageStateKind LocalKind = UsageStateKind.Loading,
     LocalTodayTokenUsage? LocalUsage = null,
     DateTimeOffset? LocalLastSuccessfulAt = null,
-    UsageReadError? LocalError = null);
+    UsageReadError? LocalError = null,
+    UsageStateKind ResetCreditsKind = UsageStateKind.Loading,
+    ResetCredits? ResetCredits = null,
+    DateTimeOffset? ResetCreditsLastSuccessfulAt = null,
+    UsageReadError? ResetCreditsError = null);
 
 public sealed class UsageMonitor(
     ICodexUsageProvider usageProvider,
@@ -75,6 +81,12 @@ public sealed class UsageMonitor(
             savedSnapshot?.AccountUsage,
             savedSnapshot?.AccountRefreshedAt,
             refreshedAt);
+        var credits = Merge(
+            codexResult.ResetCredits,
+            codexResult.ResetCreditsError,
+            savedSnapshot?.ResetCredits,
+            savedSnapshot?.ResetCreditsRefreshedAt,
+            refreshedAt);
         var local = Merge(
             localResult.Usage,
             localResult.Error,
@@ -88,7 +100,8 @@ public sealed class UsageMonitor(
 
         if (weekly.Kind is UsageStateKind.Fresh ||
             account.Kind is UsageStateKind.Fresh ||
-            local.Kind is UsageStateKind.Fresh)
+            local.Kind is UsageStateKind.Fresh ||
+            credits.Kind is UsageStateKind.Fresh)
         {
             await snapshotStore.SaveAsync(
                 new UsageSnapshot(
@@ -98,7 +111,9 @@ public sealed class UsageMonitor(
                     account.LastSuccessfulAt,
                     local.Value,
                     local.LastSuccessfulAt,
-                    local.Value is not null ? localToday : null),
+                    local.Value is not null ? localToday : null,
+                    credits.Value,
+                    credits.LastSuccessfulAt),
                 cancellationToken);
         }
 
@@ -114,7 +129,11 @@ public sealed class UsageMonitor(
             local.Kind,
             local.Value,
             local.LastSuccessfulAt,
-            local.Error);
+            local.Error,
+            credits.Kind,
+            credits.Value,
+            credits.LastSuccessfulAt,
+            credits.Error);
     }
 
     private async Task<UsageReadResult> ReadCodexAsync(

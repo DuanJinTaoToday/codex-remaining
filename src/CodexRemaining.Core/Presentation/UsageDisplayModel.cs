@@ -33,16 +33,61 @@ public sealed record UsageDisplayModel(
     string LocalStatusText,
     bool HasWeeklyUsage)
 {
+    public int RemainingPercent => HasWeeklyUsage ? 100 - UsedPercent : 0;
+    public string ResetExactText { get; init; } = string.Empty;
+    public string ResetCreditsText { get; init; } = "重置卡 --";
+    public string ResetCreditExpiryText { get; init; } = "到期时间未知";
+    public string ResetCreditExpiryExactText { get; init; } = string.Empty;
+    public string ResetCreditsStatusText { get; init; } = string.Empty;
+
     public static UsageDisplayModel FromState(
         UsageMonitorState state,
-        TimeZoneInfo timeZone)
+        TimeZoneInfo timeZone,
+        DateTimeOffset? now = null)
+    {
+        var currentTime = now ?? DateTimeOffset.UtcNow;
+        var display = CreateUsageDisplay(state, timeZone, currentTime);
+        var credits = state.ResetCredits;
+        var countText = credits is null ? "重置卡 --" : $"重置卡 {credits.AvailableCount} 张";
+        var expiryText = "到期时间未知";
+        if (credits is { AvailableCount: 0 })
+        {
+            expiryText = "暂无可用重置卡";
+        }
+        else if (credits?.NearestExpiresAt is DateTimeOffset expiresAt)
+        {
+            var remaining = expiresAt - currentTime;
+            var prefix = credits.HasCompleteExpiryDetails ? "最近一张" : "已知最早";
+            expiryText = remaining <= TimeSpan.Zero
+                ? "已到到期时间，待刷新确认"
+                : $"{prefix}：{FormatDuration(remaining)}后到期";
+
+        }
+
+        var creditStatus = StatusFor(state.ResetCreditsKind, state.ResetCreditsLastSuccessfulAt, timeZone);
+        return display with
+        {
+            ResetExactText = state.Usage?.ResetsAt is DateTimeOffset resetAt
+                ? $"重置：{FormatLocal(resetAt, timeZone)}" : "重置：未知",
+            ResetCreditsText = countText,
+            ResetCreditExpiryText = expiryText,
+            ResetCreditsStatusText = creditStatus,
+            ResetCreditExpiryExactText = credits?.NearestExpiresAt is DateTimeOffset expiry
+                ? $"到期：{FormatLocal(expiry, timeZone)}" : "到期时间未知",
+        };
+    }
+
+    private static UsageDisplayModel CreateUsageDisplay(
+        UsageMonitorState state,
+        TimeZoneInfo timeZone,
+        DateTimeOffset now)
     {
         if (state.Usage is null)
         {
-            var hasAnyUsage = state.AccountUsage is not null || state.LocalUsage is not null;
+            var hasAnyUsage = state.AccountUsage is not null || state.LocalUsage is not null || state.ResetCredits is not null;
             var visualState = hasAnyUsage
                 ? state.AccountKind is UsageStateKind.Stale ||
-                  state.LocalKind is UsageStateKind.Stale
+                  state.LocalKind is UsageStateKind.Stale || state.ResetCreditsKind is UsageStateKind.Stale
                     ? UsageVisualState.Stale
                     : UsageVisualState.Normal
                 : state.Kind is UsageStateKind.Loading ||
@@ -77,8 +122,8 @@ public sealed record UsageDisplayModel(
         }
 
         var resetText = state.Usage.ResetsAt is DateTimeOffset resetAt
-            ? $"重置：{FormatLocal(resetAt, timeZone)}"
-            : "重置：未知";
+            ? resetAt > now ? $"{FormatDuration(resetAt - now)}后重置" : "已到重置时间，待刷新"
+            : "重置时间未知";
         var isStale = state.Kind is UsageStateKind.Stale;
         var usedPercent = 100 - state.Usage.RemainingPercent;
 
@@ -110,6 +155,15 @@ public sealed record UsageDisplayModel(
             true);
     }
 
+    private static string FormatDuration(TimeSpan remaining)
+    {
+        if (remaining.TotalDays >= 1)
+            return $"{(int)remaining.TotalDays}天{remaining.Hours}小时";
+        if (remaining.TotalHours >= 1)
+            return $"{(int)remaining.TotalHours}小时{remaining.Minutes}分钟";
+        return remaining.TotalMinutes >= 1 ? $"{(int)remaining.TotalMinutes}分钟" : "不到1分钟";
+    }
+
     private static string FormatLocal(DateTimeOffset value, TimeZoneInfo timeZone)
     {
         var local = TimeZoneInfo.ConvertTime(value, timeZone);
@@ -125,6 +179,7 @@ public sealed record UsageDisplayModel(
                 state.LastSuccessfulAt,
                 state.AccountLastSuccessfulAt,
                 state.LocalLastSuccessfulAt,
+                state.ResetCreditsLastSuccessfulAt,
             }
             .Where(value => value.HasValue)
             .Select(value => value!.Value)
@@ -179,6 +234,7 @@ public sealed record UsageDisplayModel(
         state.Error?.Message ??
         state.AccountError?.Message ??
         state.LocalError?.Message ??
+        state.ResetCreditsError?.Message ??
         string.Empty;
 
     private static UsageVisualState MapRisk(UsageRisk risk) => risk switch

@@ -23,7 +23,9 @@ public sealed record UsageReadResult(
     WeeklyUsage? Usage,
     UsageReadError? Error,
     AccountSevenDayUsage? AccountUsage = null,
-    UsageReadError? AccountError = null)
+    UsageReadError? AccountError = null,
+    ResetCredits? ResetCredits = null,
+    UsageReadError? ResetCreditsError = null)
 {
     public bool IsSuccess => Usage is not null && Error is null;
 
@@ -34,6 +36,8 @@ public sealed record UsageReadResult(
 
     public static UsageReadResult Failure(UsageReadErrorKind kind, string message) =>
         new(
+            null,
+            new UsageReadError(kind, message),
             null,
             new UsageReadError(kind, message),
             null,
@@ -65,19 +69,21 @@ public sealed class CodexUsageProvider(
 {
     public async Task<UsageReadResult> ReadAsync(CancellationToken cancellationToken)
     {
-        var weeklyTask = CreateAndReadWeeklyAsync(cancellationToken);
+        var weeklyTask = CreateAndReadLimitsAsync(cancellationToken);
         var accountTask = CreateAndReadAccountAsync(cancellationToken);
         await Task.WhenAll(weeklyTask, accountTask);
         var weekly = await weeklyTask;
         var account = await accountTask;
         return new UsageReadResult(
-            weekly.Value,
-            weekly.Error,
+            weekly.Weekly.Value,
+            weekly.Weekly.Error,
             account.Value,
-            account.Error);
+            account.Error,
+            weekly.Credits.Value,
+            weekly.Credits.Error);
     }
 
-    private async Task<MetricRead<WeeklyUsage>> CreateAndReadWeeklyAsync(
+    private async Task<LimitsRead> CreateAndReadLimitsAsync(
         CancellationToken cancellationToken)
     {
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -85,19 +91,22 @@ public sealed class CodexUsageProvider(
         try
         {
             await using var session = await sessionFactory.CreateAsync(timeoutSource.Token);
-            return await ReadWeeklyAsync(session, timeoutSource.Token);
+            var response = await session.CallAsync("account/rateLimits/read", timeoutSource.Token);
+            return new LimitsRead(
+                ParseMetric(() => WeeklyUsageFactory.TryCreate(ReadWindows(response)), "一周用量窗口"),
+                ParseMetric(() => ReadResetCredits(response), "重置卡信息"));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return Failure<WeeklyUsage>(
-                UsageReadErrorKind.Timeout,
-                "读取一周用量超时，请重试。");
+            var error = new UsageReadError(UsageReadErrorKind.Timeout, "读取额度和重置卡超时，请重试。");
+            return new LimitsRead(new(null, error), new(null, error));
         }
         catch (Exception exception)
         {
-            return MapFailure<WeeklyUsage>(
+            var failure = MapFailure<WeeklyUsage>(
                 exception,
-                "暂时无法读取一周用量，请重试。");
+                "暂时无法读取额度和重置卡，请重试。");
+            return new LimitsRead(failure, new(null, failure.Error));
         }
     }
 
@@ -125,46 +134,67 @@ public sealed class CodexUsageProvider(
         }
     }
 
-    private static async Task<MetricRead<WeeklyUsage>> ReadWeeklyAsync(
-        IAppServerSession session,
-        CancellationToken cancellationToken)
+    private sealed record LimitsRead(
+        MetricRead<WeeklyUsage> Weekly,
+        MetricRead<ResetCredits> Credits);
+
+    private static MetricRead<T> ParseMetric<T>(Func<T?> parse, string name) where T : class
     {
         try
         {
-            var response = await session.CallAsync("account/rateLimits/read", cancellationToken);
-            var usage = WeeklyUsageFactory.TryCreate(ReadWindows(response));
-            return usage is not null
-                ? new MetricRead<WeeklyUsage>(usage, null)
-                : new MetricRead<WeeklyUsage>(
-                    null,
-                    new UsageReadError(
-                        UsageReadErrorKind.IncompatibleProtocol,
-                        "Codex 未返回可识别的一周用量窗口。"));
-        }
-        catch (CodexIntegrationException exception)
-        {
-            return new MetricRead<WeeklyUsage>(
-                null,
-                new UsageReadError(exception.Kind, exception.Message));
+            var value = parse();
+            return value is not null
+                ? new(value, null)
+                : Failure<T>(UsageReadErrorKind.IncompatibleProtocol, $"Codex 未返回可识别的{name}。");
         }
         catch (Exception exception) when (
-            exception is JsonException or InvalidOperationException or FormatException or OverflowException)
+            exception is JsonException or InvalidOperationException or FormatException or OverflowException or ArgumentOutOfRangeException)
         {
-            return new MetricRead<WeeklyUsage>(
-                null,
-                new UsageReadError(
-                    UsageReadErrorKind.IncompatibleProtocol,
-                    "当前 Codex 版本与一周用量协议不兼容。"));
+            return Failure<T>(UsageReadErrorKind.IncompatibleProtocol, $"Codex 返回的{name}格式不兼容。");
         }
-        catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException or ObjectDisposedException)
+    }
+
+    private static ResetCredits? ReadResetCredits(JsonElement response)
+    {
+        if (!response.TryGetProperty("rateLimitResetCredits", out var credits) ||
+            credits.ValueKind is not JsonValueKind.Object ||
+            !credits.TryGetProperty("availableCount", out var countElement) ||
+            !countElement.TryGetInt32(out var count) || count < 0)
         {
-            return new MetricRead<WeeklyUsage>(
-                null,
-                new UsageReadError(
-                    UsageReadErrorKind.Unavailable,
-                    "暂时无法读取一周用量，请重试。"));
+            return null;
         }
+
+        if (count == 0)
+        {
+            return new ResetCredits(0, null, true);
+        }
+
+        var expirations = new List<DateTimeOffset>();
+        var availableRows = 0;
+        var unknownExpiry = false;
+        if (credits.TryGetProperty("credits", out var rows) && rows.ValueKind is JsonValueKind.Array)
+        {
+            foreach (var row in rows.EnumerateArray())
+            {
+                if (!row.TryGetProperty("status", out var status) || status.GetString() != "available")
+                {
+                    continue;
+                }
+                availableRows++;
+                if (ReadNullableInt64(row, "expiresAt") is long expiresAt)
+                {
+                    expirations.Add(DateTimeOffset.FromUnixTimeSeconds(expiresAt));
+                }
+                else
+                {
+                    unknownExpiry = true;
+                }
+            }
+        }
+
+        return new ResetCredits(count,
+            expirations.Count > 0 ? expirations.Min() : null,
+            availableRows == count && !unknownExpiry);
     }
 
     private static async Task<MetricRead<AccountSevenDayUsage>> ReadAccountAsync(
@@ -211,7 +241,16 @@ public sealed class CodexUsageProvider(
 
     private static IEnumerable<RateLimitWindowData> ReadWindows(JsonElement response)
     {
-        if (!response.TryGetProperty("rateLimits", out var rateLimits))
+        JsonElement rateLimits;
+        if (response.TryGetProperty("rateLimitsByLimitId", out var byId) &&
+            byId.ValueKind is JsonValueKind.Object &&
+            byId.TryGetProperty("codex", out var codexLimits) &&
+            codexLimits.ValueKind is JsonValueKind.Object)
+        {
+            rateLimits = codexLimits;
+        }
+        else if (!response.TryGetProperty("rateLimits", out rateLimits) ||
+                 rateLimits.ValueKind is not JsonValueKind.Object)
         {
             yield break;
         }
