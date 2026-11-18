@@ -62,9 +62,10 @@ public sealed class CodexAppServerSessionFactory(string? executablePath = null)
         var fileName = isCommandScript
             ? Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe"
             : resolvedPath;
+        const string appServerArguments = "app-server --stdio --disable plugins";
         var arguments = isCommandScript
-            ? $"/d /s /c \"{Path.GetFileName(resolvedPath)} app-server --stdio\""
-            : "app-server --stdio";
+            ? $"/d /s /c \"{Path.GetFileName(resolvedPath)} {appServerArguments}\""
+            : appServerArguments;
 
         return new ProcessStartInfo
         {
@@ -221,7 +222,7 @@ internal sealed class CodexAppServerSession(Process process) : IAppServerSession
             {
                 name = "codex-remaining",
                 title = "Codex Remaining",
-                version = "0.3.0",
+                version = "0.3.1",
             },
             capabilities = new
             {

@@ -9,7 +9,7 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <AssemblyName>CodexRemaining</AssemblyName>
     <RootNamespace>CodexRemaining.App</RootNamespace>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>

@@ -1,5 +1,9 @@
 # 更新日志
 
+## [v0.3.1] - 2026-11-18
+
+- CodexRemaining 通过 `.exe` 或 `.cmd` 启动用量查询时，均传入 `--disable plugins`，避免定时刷新触发插件市场的 Git 查询。
+
 ## [v0.3.0] - 2026-11-18
 
 ### 界面
@@ -59,6 +63,7 @@
 - 该提交是历史中版本号仍为 0.1.0 的最后一个提交；下一提交 `83f5cfd` 已将版本号升级到 0.1.1。
 - 保留历史源码，不将后续 Token 统计、尺寸附着及重置卡功能回填到此版本。
 
-[v0.3.0]: https://github.com/VentureDuan/codex-remaining/compare/v0.2.0...v0.3.0
+[v0.3.1]: https://github.com/DuanJinTaoToday/codex-remaining/compare/v0.3.0...v0.3.1
+[v0.3.0]: https://github.com/DuanJinTaoToday/codex-remaining/releases/tag/v0.3.0
 [v0.2.0]: https://github.com/VentureDuan/codex-remaining/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/VentureDuan/codex-remaining/releases/tag/v0.1.0
