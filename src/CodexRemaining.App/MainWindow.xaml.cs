@@ -250,27 +250,36 @@ public partial class MainWindow : Window
 
     private void ApplyCapsuleSize(CapsuleSizePreset size)
     {
-        var scale = size switch
+        var (compactWidth, expandedWidth, compactPadding, expandedPadding, sectionGap,
+            compactValueFont, secondaryFont, headerFont, heroFont, tokenFont) = size switch
         {
-            CapsuleSizePreset.Small => 0.85,
-            CapsuleSizePreset.Large => 1.25,
-            _ => 1,
+            CapsuleSizePreset.Small => (96d, 304d, 5d, 11d, 7d, 13d, 11d, 14d, 25d, 16d),
+            CapsuleSizePreset.Large => (128d, 410d, 8d, 17d, 11d, 18d, 14d, 18d, 34d, 21d),
+            _ => (110d, 352d, 6d, 14d, 8d, 15d, 12d, 15d, 29d, 18d),
         };
-        MinWidth = 104 * scale;
-        RootBorder.LayoutTransform = new ScaleTransform(scale, scale);
+
+        Resources["CompactWidth"] = compactWidth;
+        Resources["ExpandedWidth"] = expandedWidth;
+        Resources["CompactPadding"] = new Thickness(0, compactPadding, 0, compactPadding);
+        Resources["ExpandedPadding"] = new Thickness(expandedPadding);
+        Resources["SectionMargin"] = new Thickness(0, sectionGap, 0, 0);
+        Resources["CompactValueFontSize"] = compactValueFont;
+        Resources["SecondaryFontSize"] = secondaryFont;
+        Resources["HeaderFontSize"] = headerFont;
+        Resources["HeroFontSize"] = heroFont;
+        Resources["TokenFontSize"] = tokenFont;
     }
 
     private void ApplyTheme()
     {
         var isLight = ThemeDetector.IsLightTheme();
-        Resources["CardBackground"] = CreateBrush(isLight ? "#FFFCFCFD" : "#FF181C23");
-        Resources["PrimaryTextBrush"] = CreateBrush(isLight ? "#FF20252E" : "#FFF1F3F5");
-        Resources["SecondaryTextBrush"] = CreateBrush(isLight ? "#FF4B5563" : "#FFD1D5DB");
-        Resources["ProgressTrackBrush"] = CreateBrush(isLight ? "#FFE5E9ED" : "#FF303741");
-        Resources["DividerBrush"] = CreateBrush(isLight ? "#FFE5E9ED" : "#FF303741");
-        Resources["CardBorderBrush"] = CreateBrush(isLight ? "#FFD9DEE5" : "#FF343C48");
-        Resources["SurfaceBrush"] = CreateBrush(isLight ? "#FFF0F3F5" : "#FF222831");
-        Resources["AccentSurfaceBrush"] = CreateBrush(isLight ? "#FFFFF0D4" : "#FF463723");
+        Resources["CompactBackground"] = CreateBrush(isLight ? "#FCFDFE" : "#171F2D");
+        Resources["CardBackground"] = CreateBrush(isLight ? "#FCFDFE" : "#192335");
+        Resources["PrimaryTextBrush"] = CreateBrush(isLight ? "#202631" : "#F1F3F5");
+        Resources["SecondaryTextBrush"] = CreateBrush(isLight ? "#565F6D" : "#A6B5CC");
+        Resources["ProgressTrackBrush"] = CreateBrush(isLight ? "#DBE2EA" : "#293951");
+        Resources["CardBorderBrush"] = CreateBrush(isLight ? "#D6DEE8" : "#34435C");
+        Resources["SurfaceBrush"] = CreateBrush(isLight ? "#F0F3F7" : "#233149");
     }
 
     private static SolidColorBrush CreateBrush(string value) =>
@@ -293,12 +302,14 @@ public sealed class UsageVisualStateToBrushConverter : System.Windows.Data.IValu
         object parameter,
         System.Globalization.CultureInfo culture) => value switch
     {
-        UsageVisualState.Normal => CreateBrush(37, 99, 235),
-        UsageVisualState.Warning => CreateBrush(217, 119, 6),
-        UsageVisualState.Danger => CreateBrush(220, 38, 38),
-        UsageVisualState.Stale => CreateBrush(107, 114, 128),
-        UsageVisualState.Unavailable => CreateBrush(107, 114, 128),
-        _ => CreateBrush(75, 85, 99),
+        UsageVisualState.Normal when parameter is "Outline" => CreateBrush(81, 113, 166),
+        UsageVisualState.Normal when parameter is "Dot" => CreateBrush(103, 155, 255),
+        UsageVisualState.Normal => CreateBrush(54, 118, 237),
+        UsageVisualState.Warning => CreateBrush(218, 138, 45),
+        UsageVisualState.Danger => CreateBrush(215, 80, 92),
+        UsageVisualState.Stale => CreateBrush(125, 132, 144),
+        UsageVisualState.Unavailable => CreateBrush(125, 132, 144),
+        _ => CreateBrush(149, 156, 166),
     };
 
     public object ConvertBack(

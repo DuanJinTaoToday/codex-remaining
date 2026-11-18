@@ -4,7 +4,7 @@
 
 ## 下载
 
-- [下载 v0.2.0 安装包](https://github.com/VentureDuan/codex-remaining/releases/download/v0.2.0/CodexRemaining-Setup.exe)
+- [下载 v0.3.0 安装包](https://github.com/VentureDuan/codex-remaining/releases/download/v0.3.0/CodexRemaining-Setup.exe)
 - [全部版本](https://github.com/VentureDuan/codex-remaining/releases) · [更新日志](./CHANGELOG.md)
 
 安装包为 x64 自包含程序，无需另装 .NET。使用前请先安装并登录 Codex。
