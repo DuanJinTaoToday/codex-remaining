@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly AppSettings settings;
     private readonly DispatcherTimer fullScreenTimer;
     private bool hiddenForFullScreen;
+    private bool isDragging;
     private bool placementRestoreQueued;
 
     public MainWindow(
@@ -39,6 +40,15 @@ public partial class MainWindow : Window
         fullScreenTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         fullScreenTimer.Tick += FullScreenTimer_Tick;
         fullScreenTimer.Start();
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        // The first measure can still use the native minimum size from window creation.
+        InvalidateMeasure();
+        UpdateLayout();
     }
 
     public void RestoreToVisibleArea()
@@ -90,11 +100,16 @@ public partial class MainWindow : Window
 
         try
         {
+            isDragging = true;
             DragMove();
         }
         catch (InvalidOperationException)
         {
             return;
+        }
+        finally
+        {
+            isDragging = false;
         }
 
         var moved = Math.Abs(Left - startingLeft) > 3 || Math.Abs(Top - startingTop) > 3;
@@ -208,7 +223,7 @@ public partial class MainWindow : Window
 
     private void QueueAttachmentRestore()
     {
-        if (!IsLoaded || settings.Attachment is null || placementRestoreQueued)
+        if (!IsLoaded || isDragging || settings.Attachment is null || placementRestoreQueued)
         {
             return;
         }
@@ -219,7 +234,12 @@ public partial class MainWindow : Window
             () =>
             {
                 placementRestoreQueued = false;
-                var restored = WindowPlacement.RestoreAttachment(this, settings.Attachment);
+                if (isDragging || settings.Attachment is not { } attachment)
+                {
+                    return;
+                }
+
+                var restored = WindowPlacement.RestoreAttachment(this, attachment);
                 if (restored is not null)
                 {
                     settings.Attachment = restored;
